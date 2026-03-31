@@ -1,0 +1,1296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy"
+  content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:;">
+<title>RoshiLABX</title>
+<style>
+@font-face {
+  font-family: 'NotoSansBrahmi';
+  src: url('../../fonts/NotoSansBrahmi-Regular.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+</style>
+<link rel="stylesheet" href="../../node_modules/xterm/css/xterm.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="../../node_modules/xterm/lib/xterm.js"></script>
+<script src="../../node_modules/xterm-addon-fit/lib/xterm-addon-fit.js"></script>
+<script src="../../node_modules/xterm-addon-canvas/lib/xterm-addon-canvas.js"></script>
+<style>
+:root {
+  --bg:#0c0c0c;--bg2:#111;--bg3:#181818;--bg4:#242424;
+  --bd:#2a2a2a;--bd2:#383838;
+  --cyan:#00e5ff;--green:#39ff6e;
+  --txt:#e8e8e8;--txt2:#999;--txt3:#555;
+  --red:#ff4757;--yel:#ffa502;--blue:#5b8fff;--pur:#bc8cff;
+  --uf:'Segoe UI',system-ui,sans-serif;
+  --tf:'Consolas','Courier New',monospace;
+  --sb-w:230px;
+}
+.t-dracula{--bg:#21222c;--bg2:#1e1f29;--bg3:#282a36;--bg4:#44475a;--bd:#44475a;--bd2:#6272a4;--cyan:#8be9fd;--green:#50fa7b;}
+.t-nord   {--bg:#3b4252;--bg2:#2e3440;--bg3:#3b4252;--bg4:#434c5e;--bd:#4c566a;--bd2:#5e6e82;--cyan:#88c0d0;--green:#a3be8c;}
+.t-monokai{--bg:#272822;--bg2:#1e1f1c;--bg3:#272822;--bg4:#3e3d32;--bd:#49483e;--bd2:#75715e;--cyan:#66d9e8;--green:#a6e22e;}
+.t-gruvbox{--bg:#282828;--bg2:#1d2021;--bg3:#282828;--bg4:#3c3836;--bd:#504945;--bd2:#665c54;--cyan:#83a598;--green:#b8bb26;}
+.t-cyber  {--bg:#0a0a0f;--bg2:#050508;--bg3:#0d0d18;--bg4:#1a1a2e;--bd:#1a1a2e;--bd2:#00fff240;--cyan:#00fff2;--green:#00ff88;}
+.t-solar   {--bg:#002b36;--bg2:#073642;--bg3:#002b36;--bg4:#0d3c4a;--bd:#194f5f;--bd2:#2a6070;--cyan:#2aa198;--green:#859900;}
+.t-midnight{--bg:#0d0d1a;--bg2:#0a0a14;--bg3:#12122a;--bg4:#1a1a35;--bd:#1e1e40;--bd2:#2e2e60;--cyan:#7c83ff;--green:#ff6ec7;}
+.t-forest  {--bg:#0d1a0d;--bg2:#081208;--bg3:#0d1a0d;--bg4:#152615;--bd:#1a301a;--bd2:#2a4a2a;--cyan:#7fff7f;--green:#ffd700;}
+.t-volcano {--bg:#1a0a00;--bg2:#120700;--bg3:#1a0a00;--bg4:#2a1200;--bd:#3a1800;--bd2:#5a2a00;--cyan:#ff6b35;--green:#ffd700;}
+.t-ocean   {--bg:#001b2e;--bg2:#001220;--bg3:#001b2e;--bg4:#002848;--bd:#003358;--bd2:#005080;--cyan:#00cfff;--green:#00e8b0;}
+.t-rose    {--bg:#1a0a0f;--bg2:#120608;--bg3:#1a0a0f;--bg4:#250d14;--bd:#33111a;--bd2:#4a1a28;--cyan:#ff7eb3;--green:#ffc0cb;}
+.t-glass   {--bg:rgba(255,255,255,0.05);--bg2:rgba(255,255,255,0.08);--bg3:rgba(255,255,255,0.1);--bg4:rgba(255,255,255,0.15);--bd:rgba(255,255,255,0.12);--bd2:rgba(255,255,255,0.2);--cyan:#80ffef;--green:#a0ffa0;}
+
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100vh;overflow:hidden}
+body{font-family:var(--uf);background:var(--bg);color:var(--txt);display:flex;flex-direction:column;transition:background .2s,color .2s;border-radius:0!important;margin:0;padding:0;overflow:hidden}
+body.t-glass{background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%) fixed!important}
+button{font-family:var(--uf);cursor:pointer}
+input,select{font-family:var(--uf)}
+
+/* ══ TITLEBAR ══ */
+.titlebar{
+  height:40px;
+  background:rgba(8,14,24,0.75);
+  border-bottom:1px solid rgba(0,229,255,0.12);
+  backdrop-filter:blur(16px);
+  display:flex;align-items:center;padding:0 0 0 0;
+  flex-shrink:0;-webkit-app-region:drag;user-select:none;z-index:100;
+  box-shadow:0 1px 0 rgba(0,229,255,0.06);
+}
+.tb-logo{display:flex;align-items:center;gap:8px;-webkit-app-region:drag;font-size:14px;font-weight:800}
+.tb-dot{width:18px;height:18px;border-radius:4px;background:linear-gradient(135deg,var(--cyan),var(--green));display:flex;align-items:center;justify-content:center;font-size:11px}
+.tb-sp{flex:1;-webkit-app-region:drag}
+.tb-right{display:flex;align-items:center;gap:5px;-webkit-app-region:no-drag;padding-right:0}
+.tdots{display:flex;gap:4px;margin-right:5px;padding-right:8px;border-right:1px solid var(--bd)}
+.tdot{width:14px;height:14px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:all .15s}
+.tdot:hover,.tdot.on{border-color:#fff;transform:scale(1.2)}
+.tdot[data-t=default]  {background:linear-gradient(135deg,#00e5ff,#39ff6e)}
+.tdot[data-t=dracula]  {background:linear-gradient(135deg,#bd93f9,#ff79c6)}
+.tdot[data-t=nord]     {background:linear-gradient(135deg,#88c0d0,#a3be8c)}
+.tdot[data-t=monokai]  {background:linear-gradient(135deg,#f92672,#a6e22e)}
+.tdot[data-t=gruvbox]  {background:linear-gradient(135deg,#fabd2f,#b8bb26)}
+.tdot[data-t=cyber]    {background:linear-gradient(135deg,#00fff2,#ff0055)}
+.tdot[data-t=solar]    {background:linear-gradient(135deg,#268bd2,#859900)}
+.tb-btn{background:var(--bg3);border:1px solid var(--bd2);color:var(--txt2);padding:4px 10px;border-radius:5px;font-size:11px;font-weight:700;transition:all .15s;-webkit-app-region:no-drag;white-space:nowrap}
+.tb-btn:hover{background:var(--bg4);color:var(--txt);border-color:var(--cyan)}
+.tb-btn.on{background:var(--cyan);color:#000;border-color:var(--cyan)}
+/* Sidebar toggle button in titlebar */
+.sb-toggle{width:32px;height:28px;border-radius:5px;background:var(--bg3);border:1px solid var(--bd2);color:var(--txt2);display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer;transition:all .15s;-webkit-app-region:no-drag;flex-shrink:0}
+.sb-toggle:hover{background:var(--bg4);color:var(--cyan);border-color:var(--cyan)}
+.tb-shell-sel{background:var(--bg3);border:1px solid var(--bd2);color:var(--txt2);padding:4px 6px;border-radius:5px;font-size:11px;font-weight:700;outline:none;cursor:pointer;-webkit-app-region:no-drag;max-width:54px}
+.tb-shell-sel:hover,.tb-shell-sel:focus{border-color:var(--cyan);color:var(--txt)}
+.wc-group{display:flex;align-items:stretch;height:100%;-webkit-app-region:no-drag}
+.wc{width:46px;height:100%;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .15s;flex-shrink:0;border:none;background:transparent;padding:0}
+.wc:hover{transform:scale(1.15);filter:brightness(1.15)}
+.wc:active{transform:scale(0.92)}
+
+/* ══ LAYOUT ══ */
+.layout{display:flex;flex:1;overflow:hidden;height:calc(100vh - 40px);position:relative}
+
+/* ══ SIDEBAR - AUTO-HIDE ══ */
+.sidebar{
+  width:var(--sb-w);
+  flex-shrink:0;
+  background:rgba(8,14,24,0.72);
+  border-right:1px solid rgba(0,229,255,0.10);
+  backdrop-filter:blur(20px);
+  display:flex;
+  flex-direction:column;
+  overflow-y:auto;
+  overflow-x:hidden;
+  padding:10px 0;
+  transition:transform .25s cubic-bezier(.4,0,.2,1), box-shadow .25s;
+  position:relative;
+  z-index:50;
+  box-shadow:inset -1px 0 0 rgba(0,229,255,0.04);
+}
+.sidebar::-webkit-scrollbar{width:3px}
+.sidebar::-webkit-scrollbar-thumb{background:var(--bd2);border-radius:2px}
+
+/* Hidden state - slides left */
+.sidebar.hidden{
+  transform:translateX(calc(-1 * var(--sb-w)));
+  position:absolute;
+  top:0;bottom:0;left:0;
+  box-shadow:none;
+}
+/* Peek state - hover reveals */
+.sidebar.peek{
+  transform:translateX(0);
+  box-shadow:4px 0 24px #00000060;
+}
+
+/* Hover zone trigger strip */
+.sb-hover-zone{
+  position:fixed;
+  left:0;top:40px;bottom:0;
+  width:16px;
+  z-index:200;
+  cursor:e-resize;
+  display:none;
+}
+body.sb-hidden .sb-hover-zone{display:block}
+/* Visible indicator when sidebar hidden */
+.sb-hint{
+  position:absolute;
+  left:0;top:50%;transform:translateY(-50%);
+  width:4px;height:60px;
+  background:var(--cyan);
+  border-radius:0 3px 3px 0;
+  opacity:0;
+  transition:opacity .2s;
+  pointer-events:none;
+  z-index:48;
+}
+body.sb-hidden .sb-hint{opacity:.6}
+body.sb-hidden .sb-hover-zone:hover ~ .sb-hint,
+body.sb-hidden .sb-hover-zone:hover{opacity:1}
+
+.sb-lbl{font-size:9px;font-weight:800;color:var(--txt3);letter-spacing:1.5px;text-transform:uppercase;padding:7px 16px 5px}
+.sb-item{display:flex;align-items:center;gap:10px;padding:9px 14px;cursor:pointer;font-size:13px;font-weight:500;color:var(--txt2);border-left:3px solid transparent;transition:all .15s;white-space:nowrap}
+.sb-item:hover{background:rgba(0,229,255,0.06);color:var(--txt)}
+.sb-item.on{background:rgba(0,229,255,0.08);color:var(--txt);border-left-color:var(--cyan)}
+.sb-ico{width:24px;height:24px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.i-t{background:#00e5ff12}.i-s{background:#ffa50212}.i-p{background:#9b7dff12}
+.i-m{background:#ff6b6b12}.i-k{background:#326ce512}.i-po{background:#17a58912}
+.i-d{background:#1a79c212}.i-sv{background:#8e44ad12}.i-n{background:#d3540012}
+.i-ns{background:#27ae6012}.i-l{background:#55555512}
+.sb-div{height:1px;background:rgba(0,229,255,0.08);margin:6px 14px}
+.sess-row{display:flex;align-items:center;gap:9px;padding:8px 14px;cursor:pointer;transition:background .15s}
+.sess-row:hover,.sess-row.on{background:rgba(0,229,255,0.06)}
+.sdot{width:9px;height:9px;border-radius:50%;flex-shrink:0;transition:all .3s}
+.sdot.ok {background:#39ff6e;box-shadow:0 0 8px #39ff6e;animation:dp 2s infinite}
+.sdot.ing{background:var(--yel);animation:dp .6s infinite}
+.sdot.err{background:var(--red)}
+.sdot.off{background:#333}
+@keyframes dp{0%,100%{opacity:1}50%{opacity:.3}}
+.sinfo{flex:1;min-width:0}
+.sname{font-size:1em;font-weight:700;color:var(--txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.shost{font-size:0.85em;color:var(--txt2);font-family:var(--tf);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sedit{opacity:0;background:transparent;border:none;color:var(--txt3);font-size:12px;padding:2px 5px;border-radius:3px;transition:all .15s;flex-shrink:0}
+.sess-row:hover .sedit{opacity:1}
+.sedit:hover{background:rgba(255,255,255,0.06);color:var(--txt)}
+.sb-add{margin:7px 14px 0;padding:8px;border:1px dashed rgba(0,229,255,0.18);border-radius:7px;font-size:11px;color:var(--txt3);cursor:pointer;text-align:center;transition:all .15s}
+.sb-add:hover{border-color:var(--cyan);color:var(--cyan);background:rgba(0,229,255,0.05)}
+
+/* ══ MAIN ══ */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;transition:margin-left .25s}
+body.sb-hidden .main{margin-left:20px}
+
+/* TABS */
+.tabs-bar{background:rgba(6,12,20,0.80);border-bottom:1px solid rgba(0,229,255,0.10);backdrop-filter:blur(16px);display:flex;align-items:flex-end;padding:0 6px 0 6px;height:34px;flex-shrink:0;gap:0;position:relative}
+.tab-list{display:flex;gap:2px;align-items:flex-end;height:100%}
+.tab{
+  display:flex;align-items:center;gap:8px;
+  padding:0 20px 0 14px;
+  font-size:12px;font-weight:700;
+  cursor:pointer;color:var(--txt2);
+  border:1px solid transparent;border-bottom:none;
+  border-radius:5px 5px 0 0;
+  background:rgba(255,255,255,0.03);
+  backdrop-filter:blur(10px);
+  transition:all .14s;white-space:nowrap;
+  height:28px;margin-bottom:-1px;
+  min-width:180px;max-width:260px;
+  position:relative;
+}
+.tab:hover{color:var(--txt);background:rgba(0,229,255,0.06);border-color:rgba(0,229,255,0.15)}
+.tab.on{
+  background:rgba(0,229,255,0.08);color:var(--txt);
+  border-color:rgba(0,229,255,0.2);border-bottom-color:transparent;
+  box-shadow:0 -2px 0 var(--cyan),0 0 16px rgba(0,229,255,0.08);
+}
+.tab-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.tab-label{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tab-x{
+  width:16px;height:16px;border-radius:3px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:11px;color:var(--txt3);
+  transition:all .12s;flex-shrink:0;
+  opacity:0;
+}
+.tab:hover .tab-x,.tab.on .tab-x{opacity:1}
+.tab-x:hover{background:var(--red)!important;color:#fff!important}
+.tab-add{
+  width:26px;height:24px;border-radius:5px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:18px;color:var(--cyan);cursor:pointer;
+  transition:all .15s;align-self:center;margin-right:4px;
+  background:rgba(0,229,255,0.05);border:1px solid rgba(0,229,255,0.2);
+  flex-shrink:0;
+}
+.tab-add:hover{background:rgba(0,229,255,0.12);border-color:var(--cyan)}
+.tab-dragging{opacity:0.4;border-style:dashed!important}
+.tab-drag-over{border-color:var(--cyan)!important;background:rgba(0,229,255,0.1)!important;box-shadow:0 -2px 0 var(--cyan),-2px 0 0 var(--cyan)88}
+
+/* SIDEBAR STRIP */
+.sb-strip{width:40px;background:rgba(6,12,20,0.80);border-right:1px solid rgba(0,229,255,0.08);backdrop-filter:blur(16px);display:flex;flex-direction:column;align-items:center;padding:8px 0;gap:8px;flex-shrink:0;z-index:10}
+.sb-strip-btn{width:30px;height:30px;border-radius:6px;background:transparent;border:1px solid transparent;color:var(--txt3);display:flex;align-items:center;justify-content:center;font-size:14px;cursor:pointer;transition:all .15s;flex-shrink:0}
+.sb-strip-btn:hover{background:rgba(0,229,255,0.08);color:var(--cyan);border-color:rgba(0,229,255,0.2)}
+.sb-strip-btn.on{color:var(--cyan);border-color:rgba(0,229,255,0.2)}
+.sb-strip-div{width:20px;height:1px;background:rgba(0,229,255,0.1)}
+
+/* CONN BAR */
+.conn-bar{display:flex;align-items:center;padding:5px 14px;gap:8px;border-bottom:1px solid rgba(0,229,255,0.08);background:rgba(6,12,20,0.75);backdrop-filter:blur(16px);flex-shrink:0}
+.conn-st{display:flex;align-items:center;gap:7px;font-size:12px;font-family:var(--tf);font-weight:600}
+.cdot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.cdot.ok {background:#39ff6e;box-shadow:0 0 8px #39ff6e;animation:dp 2s infinite}
+.cdot.ing{background:var(--yel);animation:dp .6s infinite}
+.cdot.err{background:var(--red)}
+.cdot.off{background:#333}
+.cb-sp{flex:1}
+.cbtn{background:transparent;border:1px solid var(--bd2);color:var(--txt2);padding:4px 10px;border-radius:4px;font-size:11px;font-weight:700;transition:all .15s}
+.cbtn:hover{border-color:var(--cyan);color:var(--cyan)}
+.cbtn.danger:hover{border-color:var(--red);color:var(--red)}
+
+/* ══ VIEWS ══ */
+.views{flex:1;overflow:hidden;position:relative;display:flex;min-height:0}
+.view{position:absolute;inset:0;display:none;background:var(--bg)}
+.wp-active #v-term{background:#000}
+.wp-active .xterm-viewport{background:transparent!important}
+.wp-active .xterm-screen{background:transparent!important}
+.view.on{display:flex}
+
+/* HOME */
+#v-home{flex-direction:column;align-items:center;justify-content:center;background:#000;overflow:hidden}
+.hgrid{display:none}
+.hglow{position:absolute;width:500px;height:500px;background:radial-gradient(ellipse,#00e5ff0a,transparent 65%);top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:1}
+.hglow2{position:absolute;width:440px;height:1px;background:linear-gradient(90deg,transparent,#00e5ff50,#39ff6e50,transparent);top:43%;left:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:1;filter:blur(1px)}
+.hinner{position:relative;z-index:2;text-align:center;display:flex;flex-direction:column;align-items:center}
+.hlogo{
+  font-size:72px;font-weight:900;line-height:1;letter-spacing:2px;margin-bottom:12px;
+  font-family:'Orbitron',sans-serif;
+  background:linear-gradient(90deg,#00e5ff,#39ff6e);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  filter:drop-shadow(0 0 6px rgba(0,229,255,0.35));
+}
+.htag{font-size:14px;color:#39ff6e;font-family:var(--tf);margin-bottom:8px;text-shadow:0 0 6px #39ff6e55;}
+.lr{color:var(--cyan)}.ll{color:var(--green)}
+.hboot{font-family:'Consolas','Courier New',monospace;font-size:13px;color:#39ff6e;margin:16px 0 28px;text-align:left;min-height:42px;line-height:1.9}
+.hboot-line{opacity:0;transition:opacity .3s}
+.hboot-line.show{opacity:1}
+.hcursor{display:inline-block;width:8px;height:13px;background:#39ff6e;vertical-align:middle;animation:hblink .7s infinite}
+@keyframes hblink{0%,100%{opacity:1}50%{opacity:0}}
+.hcards{display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-bottom:32px}
+.hcard{
+  background:rgba(10,18,30,0.72);
+  border:1px solid rgba(0,229,255,0.18);
+  border-radius:20px;
+  padding:36px 24px 28px;
+  width:180px;
+  cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;gap:14px;
+  transition:all .3s;
+  position:relative;overflow:hidden;
+  backdrop-filter:blur(18px);
+  box-shadow:
+    0 0 0 1px rgba(0,229,255,0.08),
+    0 8px 32px rgba(0,0,0,0.6),
+    0 0 60px rgba(0,229,255,0.06),
+    inset 0 1px 0 rgba(255,255,255,0.07);
+}
+.hcard::before{
+  content:'';position:absolute;
+  top:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,0.15),transparent);
+}
+.hcard::after{
+  content:'';position:absolute;
+  bottom:0;left:15%;right:15%;height:1px;
+  background:linear-gradient(90deg,transparent,#00e5ff,transparent);
+  opacity:0.7;
+  box-shadow:0 0 12px #00e5ff;
+}
+.hcard:hover{
+  background:rgba(0,229,255,0.07);
+  border-color:rgba(0,229,255,0.45);
+  transform:translateY(-6px);
+  box-shadow:
+    0 0 0 1px rgba(0,229,255,0.2),
+    0 16px 48px rgba(0,0,0,0.7),
+    0 0 80px rgba(0,229,255,0.15),
+    inset 0 1px 0 rgba(255,255,255,0.1);
+}
+.hcard-ico{
+  width:64px;height:64px;border-radius:14px;
+  display:flex;align-items:center;justify-content:center;font-size:30px;
+  background:rgba(0,0,0,0.55);
+  border:1px solid rgba(255,255,255,0.08);
+  box-shadow:inset 0 2px 8px rgba(0,0,0,0.5);
+}
+.hcard-nm{font-size:13px;font-weight:700;color:rgba(255,255,255,0.85);text-align:center;letter-spacing:.5px}
+.hcard:hover .hcard-nm{color:#fff}
+.hbtns{display:flex;gap:12px;justify-content:center}
+.hbtn-add{background:var(--cyan);color:#000;border:none;padding:12px 28px;border-radius:8px;font-size:13px;font-weight:800;cursor:pointer;letter-spacing:.5px;transition:all .2s}
+.hbtn-add:hover{background:#00cfff;transform:translateY(-1px);box-shadow:0 6px 20px #00e5ff40}
+.hbtn-local{background:transparent;color:#e8e8e8;border:1px solid rgba(255,255,255,0.2);padding:12px 24px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;letter-spacing:.5px;transition:all .2s}
+.hbtn-local:hover{border-color:rgba(255,255,255,0.5);background:rgba(255,255,255,0.06);transform:translateY(-1px)}
+.hbtn-git{background:transparent;color:#bc8cff;border:1px solid rgba(188,140,255,0.35);padding:12px 24px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;letter-spacing:.5px;transition:all .2s}
+.hbtn-git:hover{border-color:#bc8cff;background:rgba(188,140,255,0.08);transform:translateY(-1px);box-shadow:0 4px 16px rgba(188,140,255,0.2)}
+
+/* TERMINAL */
+#v-term{flex-direction:row;background:transparent}
+#term-wrap{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;min-height:0;background:transparent}
+/* Mouse wheel font size tooltip */
+.font-toast{
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  background:#000000cc;border:1px solid var(--cyan);color:var(--cyan);
+  padding:10px 20px;border-radius:8px;font-size:18px;font-weight:700;
+  font-family:var(--tf);pointer-events:none;z-index:200;
+  opacity:0;transition:opacity .2s;white-space:nowrap;
+}
+.font-toast.show{opacity:1}
+
+/* K8S PANEL */
+.k8s-panel{width:254px;flex-shrink:0;border-left:1px solid var(--bd);background:var(--bg2);display:flex;flex-direction:column;overflow:hidden;transition:width .25s}
+.k8s-panel.hide{width:0;border:none;overflow:hidden}
+.k8s-hdr{padding:11px 13px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:7px;flex-shrink:0}
+.k8s-hdr-ico{font-size:16px;color:var(--blue)}
+.k8s-hdr-ttl{font-size:13px;font-weight:800;flex:1}
+.k8s-live{background:#326ce5;color:#fff;font-size:9px;font-weight:800;padding:2px 7px;border-radius:8px}
+.k8s-body{flex:1;overflow-y:auto;padding:5px 0}
+.k8s-body::-webkit-scrollbar{width:3px}
+.k8s-body::-webkit-scrollbar-thumb{background:var(--bd2);border-radius:2px}
+.k8s-stl{font-size:9px;font-weight:800;color:var(--txt3);letter-spacing:1.2px;text-transform:uppercase;padding:9px 13px 4px}
+.k8s-cmd{margin:2px 13px;padding:7px 10px;border:1px solid var(--bd2);border-radius:5px;background:transparent;color:var(--txt2);font-size:11px;font-family:var(--tf);cursor:pointer;text-align:left;display:block;width:calc(100% - 26px);transition:all .14s}
+.k8s-cmd:hover{background:var(--bg4);color:var(--blue);border-color:var(--blue)}
+.k8s-foot{padding:8px 13px;border-top:1px solid var(--bd);font-size:10px;font-family:var(--tf);color:var(--txt3);flex-shrink:0}
+
+/* ══ SYSTEM MONITOR VIEW ══ */
+#v-mon{flex-direction:column;overflow:hidden;background:var(--bg)}
+.mon-header{display:flex;align-items:center;padding:12px 20px;border-bottom:1px solid var(--bd);gap:12px;flex-shrink:0}
+.mon-title{font-size:15px;font-weight:800;flex:1}
+.mon-host{font-size:11px;font-family:var(--tf);color:var(--txt3)}
+.mon-status{display:flex;align-items:center;gap:6px;font-size:11px}
+.mon-dot{width:8px;height:8px;border-radius:50%}
+.mon-dot.live{background:#39ff6e;box-shadow:0 0 7px #39ff6e;animation:dp 1.5s infinite}
+.mon-dot.off{background:#333}
+.mon-btn{background:transparent;border:1px solid var(--bd2);color:var(--txt2);padding:5px 12px;border-radius:5px;font-size:11px;font-weight:700;transition:all .15s}
+.mon-btn:hover{border-color:var(--cyan);color:var(--cyan)}
+.mon-btn.stop:hover{border-color:var(--red);color:var(--red)}
+.mon-no-sess{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px}
+.mon-no-sess .ph-ico{font-size:52px;opacity:.2}
+.mon-no-sess .ph-ttl{font-size:18px;font-weight:800;color:var(--txt2)}
+.mon-no-sess .ph-sub{font-size:13px;color:var(--txt3);text-align:center;max-width:320px}
+.mon-body{flex:1;overflow-y:auto;padding:16px 20px;display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.mon-body::-webkit-scrollbar{width:4px}
+.mon-body::-webkit-scrollbar-thumb{background:var(--bd2);border-radius:2px}
+.mon-card{background:var(--bg3);border:1px solid var(--bd2);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:10px}
+.mon-card.full{grid-column:1/-1}
+.mon-card-title{font-size:11px;font-weight:800;color:var(--txt2);text-transform:uppercase;letter-spacing:.8px;display:flex;align-items:center;gap:7px}
+.mon-card-ico{font-size:16px}
+.mon-value{font-size:28px;font-weight:900;font-family:var(--tf);color:var(--txt)}
+.mon-value span{font-size:13px;font-weight:400;color:var(--txt3)}
+.mon-bar-wrap{background:var(--bg4);border-radius:4px;height:6px;overflow:hidden}
+.mon-bar{height:100%;border-radius:4px;transition:width .8s ease;min-width:2px}
+.mon-bar.cpu{background:linear-gradient(90deg,var(--blue),var(--cyan))}
+.mon-bar.mem{background:linear-gradient(90deg,var(--green),#00e5ff)}
+.mon-bar.dsk{background:linear-gradient(90deg,var(--yel),var(--red))}
+.mon-sub{font-size:11px;color:var(--txt3);font-family:var(--tf)}
+.mon-cores{display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:8px}
+.mon-core{background:var(--bg4);border-radius:6px;padding:8px;text-align:center}
+.mon-core-lbl{font-size:9px;color:var(--txt3);font-weight:700;text-transform:uppercase;margin-bottom:4px}
+.mon-core-val{font-size:14px;font-weight:800;font-family:var(--tf)}
+.mon-procs{width:100%}
+.mon-procs th{font-size:10px;font-weight:800;color:var(--txt3);text-transform:uppercase;letter-spacing:.6px;padding:4px 8px;text-align:left;border-bottom:1px solid var(--bd)}
+.mon-procs td{font-size:11px;font-family:var(--tf);padding:5px 8px;border-bottom:1px solid var(--bd);color:var(--txt2)}
+.mon-procs tr:hover td{background:var(--bg4);color:var(--txt)}
+.mon-procs td:first-child{color:var(--txt);font-weight:600}
+.mon-net-row{display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--bd)}
+.mon-net-row:last-child{border:none}
+.mon-net-lbl{font-size:11px;color:var(--txt2)}
+.mon-net-val{font-size:11px;font-family:var(--tf);color:var(--cyan)}
+.mon-uptime{font-size:13px;font-family:var(--tf);color:var(--green);font-weight:700}
+.mon-refresh-info{font-size:10px;color:var(--txt3);text-align:right}
+
+.mon-mode-tabs{display:flex;gap:4px;margin:0 4px}
+.mon-mode-tab{background:var(--bg3);border:1px solid var(--bd2);color:var(--txt2);padding:4px 12px;border-radius:5px;font-size:11px;font-weight:700;transition:all .15s}
+.mon-mode-tab:hover{border-color:var(--cyan);color:var(--cyan)}
+.mon-mode-tab.on{background:var(--cyan);color:#000;border-color:var(--cyan)}
+.local-term-group{display:flex;align-items:center;gap:6px}
+.shell-select{background:var(--bg3);border:1px solid var(--bd2);color:var(--txt2);padding:9px 10px;border-radius:7px;font-size:12px;font-weight:600;outline:none;cursor:pointer;transition:all .15s}
+.shell-select:hover,.shell-select:focus{border-color:var(--cyan);color:var(--txt)}
+/* Local terminal tab indicator */
+.tab-local{background:#39ff6e22!important}
+/* PLACEHOLDER */
+.ph{flex-direction:column;align-items:center;justify-content:center;gap:14px}
+.ph-ico{font-size:52px;opacity:.2}
+.ph-ttl{font-size:20px;font-weight:800;color:var(--txt2)}
+.ph-sub{font-size:13px;color:var(--txt3);max-width:340px;text-align:center}
+
+/* BUTTONS */
+.btn-p{background:var(--cyan);color:#000;border:none;padding:10px 24px;border-radius:7px;font-size:13px;font-weight:800;transition:all .18s}
+.btn-p:hover{filter:brightness(1.1);transform:translateY(-1px)}
+.btn-s{background:transparent;color:var(--txt2);border:1px solid var(--bd2);padding:10px 24px;border-radius:7px;font-size:13px;font-weight:700;transition:all .18s}
+.btn-s:hover{border-color:var(--txt2);color:var(--txt)}
+.btn-danger{background:transparent;color:var(--red);border:1px solid var(--red);padding:7px 14px;border-radius:6px;font-size:12px;font-weight:700;transition:all .15s}
+.btn-danger:hover{background:var(--red);color:#fff}
+
+/* MODAL */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:500;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(8px)}
+.overlay.hide{display:none}
+.modal{
+  background:rgba(8,14,24,0.82);
+  border:1px solid rgba(0,229,255,0.18);
+  border-radius:14px;
+  width:500px;max-width:96vw;
+  backdrop-filter:blur(24px);
+  box-shadow:0 0 0 1px rgba(0,229,255,0.06),0 24px 80px rgba(0,0,0,0.8),0 0 60px rgba(0,229,255,0.05);
+  overflow:hidden;
+}
+.m-hdr{
+  display:flex;align-items:center;padding:14px 18px;
+  border-bottom:1px solid rgba(0,229,255,0.15);
+  background:rgba(0,229,255,0.04);
+}
+.m-ttl{
+  font-size:14px;font-weight:800;flex:1;color:var(--cyan);
+  font-family:var(--tf);letter-spacing:.5px;
+}
+.m-cls{
+  background:transparent;border:1px solid rgba(255,255,255,0.1);
+  color:var(--txt3);font-size:14px;cursor:pointer;
+  width:26px;height:26px;border-radius:5px;
+  display:flex;align-items:center;justify-content:center;
+  transition:all .15s;
+}
+.m-cls:hover{background:var(--red);color:#fff;border-color:var(--red)}
+.m-body{padding:18px;display:flex;flex-direction:column;gap:13px}
+.frow{display:flex;flex-direction:column;gap:5px}
+.frow.two{flex-direction:row;gap:12px}
+.frow.two>div{flex:1;display:flex;flex-direction:column;gap:5px}
+.frow label{
+  font-size:9px;font-weight:800;color:var(--txt3);
+  text-transform:uppercase;letter-spacing:1px;
+}
+.frow input,.frow select{
+  background:rgba(255,255,255,0.04);
+  border:1px solid rgba(0,229,255,0.12);
+  color:var(--txt);
+  padding:9px 12px;
+  border-radius:6px;
+  font-size:12px;
+  font-family:var(--tf);
+  outline:none;
+  transition:all .15s;
+  width:100%;
+}
+.frow input:focus,.frow select:focus{
+  border-color:rgba(0,229,255,0.5);
+  background:rgba(0,229,255,0.05);
+  box-shadow:0 0 0 2px rgba(0,229,255,0.08);
+}
+.frow input::placeholder{color:var(--txt3)}
+.auth-tabs{display:flex;gap:6px}
+.at{
+  background:rgba(255,255,255,0.03);border:1px solid rgba(0,229,255,0.12);
+  color:var(--txt2);padding:7px 18px;border-radius:6px;
+  font-size:11px;font-weight:700;transition:all .15s;cursor:pointer;
+}
+.at:hover{border-color:var(--cyan);color:var(--cyan)}
+.at.on{background:var(--cyan);color:#000;border-color:var(--cyan)}
+.ap{display:flex;flex-direction:column;gap:13px}
+.ap.hide{display:none}
+.file-row{display:flex;gap:8px}
+.file-row input{flex:1}
+.btn-browse{
+  background:rgba(255,255,255,0.04);border:1px solid rgba(0,229,255,0.12);
+  color:var(--txt2);padding:9px 13px;border-radius:6px;
+  font-size:11px;font-weight:700;transition:all .15s;
+  white-space:nowrap;cursor:pointer;
+}
+.btn-browse:hover{border-color:var(--cyan);color:var(--cyan)}
+.ctags{display:flex;gap:10px;flex-wrap:wrap}
+.ctag{width:26px;height:26px;border-radius:50%;cursor:pointer;border:3px solid transparent;transition:all .15s}
+.ctag:hover{transform:scale(1.2)}
+.ctag.on{border-color:#fff!important;box-shadow:0 0 0 2px var(--bd2)}
+.m-foot{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:13px 18px;border-top:1px solid rgba(0,229,255,0.1);gap:8px;
+  background:rgba(0,229,255,0.03);
+}
+.m-foot-r{display:flex;gap:8px}
+.test-res{
+  padding:10px 18px;font-size:11px;font-family:var(--tf);
+  border-top:1px solid var(--bd);
+}
+.test-res.hide{display:none}
+.test-res.ok{color:var(--green)}
+.test-res.err{color:var(--red)}
+/* Delete button — styled to match terminal danger */
+.btn-danger{
+  background:transparent;
+  color:var(--red);
+  border:1px solid var(--red)88;
+  padding:8px 16px;border-radius:6px;
+  font-size:11px;font-weight:700;
+  transition:all .15s;cursor:pointer;
+  font-family:var(--tf);
+}
+.btn-danger:hover{background:var(--red);color:#fff;border-color:var(--red)}
+.test-res.ok{color:var(--green);background:#39ff6e0a}
+.test-res.err{color:var(--red);background:#ff47570a}
+
+/* COLOR PANEL */
+.cpanel{position:fixed;top:40px;right:0;bottom:0;width:300px;background:rgba(6,12,20,0.88);border-left:1px solid rgba(0,229,255,0.18);backdrop-filter:blur(24px);z-index:400;display:flex;flex-direction:column;box-shadow:-10px 0 40px rgba(0,0,0,0.7);transform:translateX(100%);transition:transform .25s}
+.cpanel.open{transform:translateX(0)}
+.cp-hdr{padding:12px 15px;border-bottom:1px solid rgba(0,229,255,0.1);display:flex;align-items:center;gap:8px;flex-shrink:0}
+.cp-ttl{font-weight:800;font-size:13px;flex:1;color:var(--cyan)}
+.cp-cls{background:transparent;border:1px solid rgba(255,255,255,0.1);color:var(--txt2);width:24px;height:24px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:14px;cursor:pointer;transition:all .15s}
+.cp-cls:hover{background:var(--red);color:#fff;border-color:var(--red)}
+.cp-tabs{display:flex;border-bottom:1px solid rgba(0,229,255,0.1);flex-shrink:0}
+.cp-tab{flex:1;padding:9px 0;background:transparent;border:none;color:var(--txt2);font-size:11px;font-weight:700;cursor:pointer;transition:all .15s;border-bottom:2px solid transparent}
+.cp-tab:hover{color:var(--txt)}
+.cp-tab.on{color:var(--cyan);border-bottom-color:var(--cyan)}
+.cp-body{flex:1;overflow-y:auto;padding:12px 14px;scrollbar-width:thin}
+.cp-body::-webkit-scrollbar{width:3px}
+.cp-body::-webkit-scrollbar-thumb{background:var(--bd2);border-radius:2px}
+.cp-stl{font-size:9px;font-weight:800;color:var(--txt3);letter-spacing:1.2px;text-transform:uppercase;margin:14px 0 7px}
+.cp-stl:first-child{margin-top:0}
+.tgrid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
+.tc,.sbt{border:2px solid var(--bd2);border-radius:7px;padding:7px;cursor:pointer;transition:all .15s}
+.tc:hover,.sbt:hover{border-color:var(--txt2)}
+.tc.on,.sbt.on{border-color:var(--cyan);background:#00e5ff08}
+.tc-prev{height:26px;border-radius:4px;margin-bottom:4px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:900;gap:2px}
+.sbt-prev{height:26px;border-radius:4px;margin-bottom:4px;display:flex;align-items:center;justify-content:center}
+.tc-nm{font-size:9px;font-weight:700;color:var(--txt);text-align:center}
+.font-row{display:flex;align-items:center;gap:8px}
+.fpm{width:28px;height:28px;border:1px solid var(--bd2);border-radius:4px;background:transparent;color:var(--txt);font-size:18px;display:flex;align-items:center;justify-content:center;transition:all .15s;cursor:pointer}
+.fpm:hover{border-color:var(--cyan);color:var(--cyan)}
+.fval{flex:1;text-align:center;font-family:var(--tf);font-size:13px;font-weight:700}
+.cbtns{display:flex;gap:4px}
+.cb{flex:1;padding:5px 3px;border:1px solid var(--bd2);border-radius:5px;background:transparent;color:var(--txt2);font-size:10px;font-weight:700;transition:all .15s;text-align:center;cursor:pointer}
+.cb:hover,.cb.on{border-color:var(--cyan);color:var(--cyan);background:#00e5ff08}
+.sl-row{display:flex;align-items:center;gap:8px}
+input[type=range]{flex:1;-webkit-appearance:none;height:3px;border-radius:2px;background:var(--bd2);outline:none;cursor:pointer}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;background:var(--cyan);cursor:pointer;border:2px solid var(--bg2)}
+.slval{font-size:11px;font-family:var(--tf);color:var(--txt3);min-width:36px;text-align:right}
+.fsel{background:var(--bg3);border:1px solid var(--bd2);color:var(--txt);padding:7px 9px;border-radius:6px;font-size:12px;outline:none;width:100%}
+.fsel:focus{border-color:var(--cyan)}
+.wheel-hint{font-size:10px;color:var(--txt3);text-align:center;padding:5px 0;border-top:1px solid var(--bd);margin-top:6px}
+/* Accent dots */
+.accent-grid{display:flex;flex-wrap:wrap;gap:8px;padding:4px 0}
+.accent-dot{width:22px;height:22px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:all .15s}
+.accent-dot:hover,.accent-dot.on{border-color:#fff;transform:scale(1.2)}
+/* Color pickers */
+.color-grid{display:flex;flex-direction:column;gap:7px}
+.color-row{display:flex;align-items:center;justify-content:space-between}
+.color-row label{font-size:11px;color:var(--txt2)}
+.color-pick-wrap{display:flex;align-items:center;gap:6px}
+input[type=color]{width:32px;height:22px;border:1px solid var(--bd2);border-radius:4px;background:transparent;cursor:pointer;padding:1px}
+input[type=color]::-webkit-color-swatch-wrapper{padding:0}
+input[type=color]::-webkit-color-swatch{border:none;border-radius:3px}
+.color-hex{font-size:10px;font-family:var(--tf);color:var(--txt3);min-width:52px}
+.cp-reset-btn{width:100%;margin-top:10px;padding:7px;background:transparent;border:1px solid var(--bd2);color:var(--txt2);border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;transition:all .15s}
+.cp-reset-btn:hover{border-color:var(--cyan);color:var(--cyan)}
+
+
+/* ═══════════════════════════════════════════
+   KUBERNETES DASHBOARD
+═══════════════════════════════════════════ */
+#v-k8s{flex-direction:column;overflow:hidden;background:var(--bg)}
+.k8sd-hdr{display:flex;align-items:center;gap:10px;padding:10px 18px;border-bottom:1px solid var(--bd);flex-shrink:0;background:var(--bg2)}
+.k8sd-title{font-size:15px;font-weight:800;color:var(--txt)}
+.k8sd-dot{width:9px;height:9px;border-radius:50%;background:#326ce5;box-shadow:0 0 8px #326ce5;animation:dp 1.5s infinite}
+.k8sd-ctx{font-size:12px;font-family:var(--tf);color:var(--txt2);flex:1}
+.k8sd-ns{background:var(--bg3);border:1px solid var(--bd2);color:var(--txt);padding:4px 8px;border-radius:5px;font-size:11px;outline:none;max-width:160px}
+.k8sd-ns:focus{border-color:var(--cyan)}
+.k8sd-btn{background:var(--bg3);border:1px solid var(--bd2);color:var(--txt2);padding:5px 11px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;transition:all .15s}
+.k8sd-btn:hover{border-color:var(--cyan);color:var(--cyan)}
+.k8sd-btn.on{background:var(--cyan);color:#000;border-color:var(--cyan)}
+.k8sd-refresh{font-size:11px;color:var(--txt2)}
+
+/* Nav tabs */
+.k8sd-tabs{display:flex;gap:1px;background:var(--bg2);border-bottom:1px solid var(--bd);flex-shrink:0}
+.k8sd-tab{padding:9px 20px;font-size:12px;font-weight:700;color:var(--txt2);cursor:pointer;border-bottom:2px solid transparent;transition:all .15s;background:transparent;border-top:none;border-left:none;border-right:none}
+.k8sd-tab:hover{color:var(--txt)}
+.k8sd-tab.on{color:var(--cyan);border-bottom-color:var(--cyan)}
+
+/* Body */
+.k8sd-body{flex:1;overflow-y:auto;padding:16px 18px;scrollbar-width:thin}
+.k8sd-body::-webkit-scrollbar{width:4px}
+.k8sd-body::-webkit-scrollbar-thumb{background:var(--bd2);border-radius:2px}
+
+/* Stat cards */
+.k8sd-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:16px}
+.k8sd-card{background:var(--bg3);border:1px solid var(--bd2);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:6px}
+.k8sd-card-top{display:flex;align-items:center;gap:7px}
+.k8sd-card-ico{font-size:18px}
+.k8sd-card-lbl{font-size:11px;font-weight:800;color:var(--txt2);text-transform:uppercase;letter-spacing:.8px}
+.k8sd-card-val{font-size:32px;font-weight:900;font-family:var(--tf);color:var(--txt)}
+.k8sd-card-sub{font-size:12px;color:var(--txt2);font-family:var(--tf)}
+.k8sd-card.blue{border-color:#326ce540}
+.k8sd-card.green{border-color:#39ff6e40}
+.k8sd-card.red{border-color:#ff475740}
+.k8sd-card.yel{border-color:#ffa50240}
+
+/* Section headers */
+.k8sd-sec{font-size:11px;font-weight:800;color:var(--txt2);letter-spacing:1px;text-transform:uppercase;margin:16px 0 8px;display:flex;align-items:center;gap:8px}
+.k8sd-sec::after{content:'';flex:1;height:1px;background:var(--bd)}
+
+/* Tables */
+.k8sd-table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px}
+.k8sd-table th{text-align:left;padding:8px 10px;font-size:11px;font-weight:800;color:var(--txt2);text-transform:uppercase;letter-spacing:.6px;border-bottom:1px solid var(--bd);white-space:nowrap}
+.k8sd-table td{padding:8px 10px;border-bottom:1px solid var(--bd);color:var(--txt);font-family:var(--tf);font-size:12px;white-space:nowrap}
+.k8sd-table tr:hover td{background:var(--bg3);color:var(--txt)}
+.k8sd-table td:first-child{color:var(--txt);font-weight:600}
+
+/* Status badges */
+.k8s-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700}
+.k8s-badge.running{background:#39ff6e20;color:#39ff6e}
+.k8s-badge.pending{background:#ffa50220;color:#ffa502}
+.k8s-badge.failed{background:#ff475720;color:#ff4757}
+.k8s-badge.ready{background:#326ce520;color:#82b4ff}
+.k8s-badge.notready{background:#ff475720;color:#ff4757}
+.k8s-badge.unknown{background:#55555520;color:#888}
+
+/* Charts */
+.k8sd-chart-wrap{background:var(--bg3);border:1px solid var(--bd2);border-radius:10px;padding:14px;margin-bottom:12px}
+.k8sd-chart-title{font-size:11px;font-weight:800;color:var(--txt2);margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.k8sd-chart-canvas{width:100%;height:120px}
+
+/* Node bars */
+.k8sd-node-bar-wrap{display:flex;align-items:center;gap:8px;margin:3px 0}
+.k8sd-node-bar-lbl{font-size:11px;color:var(--txt2);width:60px;flex-shrink:0;font-family:var(--tf)}
+.k8sd-node-bar-bg{flex:1;height:8px;background:var(--bg4);border-radius:4px;overflow:hidden}
+.k8sd-node-bar-fill{height:100%;border-radius:3px;transition:width .6s ease}
+.k8sd-node-bar-val{font-size:11px;color:var(--txt);font-family:var(--tf);width:60px;text-align:right;flex-shrink:0}
+
+/* Empty / error states */
+.k8sd-empty{text-align:center;padding:40px;color:var(--txt3);font-size:13px}
+.k8sd-err{color:var(--red);font-size:11px;font-family:var(--tf);padding:8px 12px;background:#ff475710;border-radius:6px;margin-bottom:12px}
+.k8sd-no-conn{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:14px;color:var(--txt3)}
+.k8sd-no-conn .ph-ico{font-size:52px;opacity:.2}
+.k8sd-no-conn .ph-ttl{font-size:18px;font-weight:800;color:var(--txt2)}
+.k8sd-no-conn .ph-sub{font-size:13px;text-align:center;max-width:320px}
+
+/* TOAST */
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--bg4);border:1px solid var(--bd2);color:var(--txt);padding:8px 18px;border-radius:8px;font-size:12px;z-index:600;display:flex;align-items:center;gap:8px;box-shadow:0 4px 20px #00000060}
+.toast.hide{display:none}
+.t-dot{width:7px;height:7px;border-radius:50%;background:var(--cyan);flex-shrink:0}
+.hide{display:none!important}
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&family=Exo+2:wght@400;600;700&family=Oxanium:wght@400;700&family=Audiowide&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<!-- TITLEBAR -->
+<div class="titlebar" ondblclick="window.roshi.maximize()">
+  <div class="tb-logo">
+    <div class="tb-dot">⚡</div>
+    <span>RoshiLABX</span>
+    <span style="font-family:serif;font-size:13px;color:#c8a84b;opacity:0.8;margin-left:6px;letter-spacing:2px">𑀭𑁄𑀰𑀦 𑀯𑀸𑀦𑀔𑁂𑀤𑁂</span>
+  </div>
+  <div class="tb-sp"></div>
+  <div class="tb-right" style="padding-right:0">
+    <div class="tdots">
+      <div class="tdot on"  data-t="default"></div>
+      <div class="tdot"     data-t="dracula"></div>
+      <div class="tdot"     data-t="nord"></div>
+      <div class="tdot"     data-t="monokai"></div>
+      <div class="tdot"     data-t="gruvbox"></div>
+      <div class="tdot"     data-t="cyber"></div>
+      <div class="tdot"     data-t="solar"></div>
+      <div class="tdot"     data-t="glass"  style="background:linear-gradient(135deg,rgba(255,255,255,0.4),rgba(128,255,239,0.6));border:1px solid rgba(255,255,255,0.3)"></div>
+    </div>
+    <button class="tb-btn" id="btnColors">🎨 Colors</button>
+  </div>
+  <div class="wc-group">
+    <div class="wc min" id="btnMin" title="Minimize"><svg style="pointer-events:none" width="12" height="2" viewBox="0 0 12 2"><rect width="12" height="2" rx="1" fill="#ccc"/></svg></div>
+    <div class="wc max" id="btnMax" title="Maximize"><svg style="pointer-events:none" width="13" height="13" viewBox="0 0 13 13"><rect x="1" y="1" width="11" height="11" rx="1" fill="none" stroke="#ccc" stroke-width="1.8"/></svg></div>
+    <div class="wc cls" id="btnClose" title="Close"><svg style="pointer-events:none" width="13" height="13" viewBox="0 0 13 13"><line x1="1" y1="1" x2="12" y2="12" stroke="white" stroke-width="1.8" stroke-linecap="round"/><line x1="12" y1="1" x2="1" y2="12" stroke="white" stroke-width="1.8" stroke-linecap="round"/></svg></div>
+  </div>
+</div>
+
+<!-- LAYOUT -->
+<div class="layout">
+
+  <!-- SIDEBAR STRIP — always visible -->
+  <div class="sb-strip" id="sbStrip">
+    <div class="sb-strip-btn on" id="sbStripToggle" title="Toggle Sidebar (Ctrl+B)">☰</div>
+    <div class="sb-strip-div"></div>
+    <div class="sb-strip-btn" data-nav="home" title="Home">⬛</div>
+    <div class="sb-strip-btn" data-nav="k8sdash" title="K8s Dashboard">☸</div>
+  </div>
+
+  <!-- SIDEBAR -->
+  <div class="sidebar" id="sidebar">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px 6px;border-bottom:1px solid var(--bd);margin-bottom:4px">
+      <span style="font-size:11px;font-weight:800;color:var(--txt3);letter-spacing:1px;text-transform:uppercase">RoshiLABX</span>
+      <div class="sb-toggle" id="sbToggle" title="Toggle Sidebar (Ctrl+B)" style="width:28px;height:28px;font-size:14px">☰</div>
+    </div>
+    <div class="sb-lbl">Navigation</div>
+    <div class="sb-item on" data-nav="home"><div class="sb-ico i-t">⬛</div>Terminal</div>
+    <div class="sb-div"></div>
+    <div class="sb-lbl">Kubernetes</div>
+    <div class="sb-item" data-nav="k8sdash"><div class="sb-ico i-k">☸</div>K8s Dashboard</div>
+    <div class="sb-div"></div>
+    <div class="sb-lbl">Saved Sessions</div>
+    <div id="sessList"></div>
+    <div class="sb-add" id="sbAdd">＋ Add Session</div>
+  </div>
+
+  <!-- Hover zone + hint for auto-show -->
+  <div class="sb-hover-zone" id="sbHoverZone"></div>
+  <div class="sb-hint" id="sbHint"></div>
+
+  <!-- MAIN -->
+  <div class="main" id="mainArea">
+    <div class="tabs-bar">
+      <div class="tab-list" id="tabList"></div>
+      <button class="tab-add" id="tabAdd">＋</button>
+    </div>
+
+    <div class="conn-bar hide" id="connBar">
+      <div class="conn-st">
+        <div class="cdot off" id="cdot"></div>
+        <span id="connLbl" style="color:var(--txt2)">Disconnected</span>
+      </div>
+      <div class="cb-sp"></div>
+      <button class="cbtn" id="btnReconn">⟳ Reconnect</button>
+      <button class="cbtn" id="btnDup">⊞ Duplicate</button>
+      <button class="cbtn danger" id="btnDisconn">⏻ Disconnect</button>
+    </div>
+
+    <div class="views">
+
+      <!-- HOME -->
+      <div class="view on" id="v-home">
+        <canvas id="homeCanvas" style="position:absolute;top:0;left:0;width:100%;height:100%;z-index:0;pointer-events:none;opacity:0;transition:opacity .4s"></canvas>
+        <div class="hglow"></div>
+        <div class="hglow2"></div>
+        <div class="hinner">
+          <div class="hlogo">RoshiLABX</div>
+          <div class="htag">Your personal home lab SSH manager</div>
+          <div class="hboot" id="hboot"></div>
+          <div class="hbtns">
+            <button class="hbtn-add" id="homeAdd">＋ Add Session</button>
+            <button class="hbtn-local" id="homeLocal">⬛ Local Terminal</button>
+            <button class="hbtn-git" id="homeGitBash">⚡ Git Bash &rsaquo;</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- TERMINAL -->
+      <div class="view" id="v-term">
+        <canvas id="wallpaperCanvas" style="position:absolute;top:0;left:0;width:100%;height:100%;z-index:0;pointer-events:none;opacity:0;transition:opacity .4s"></canvas>
+        <div id="term-wrap" style="position:relative;z-index:1;">
+          <div class="font-toast" id="fontToast"></div>
+        </div>
+        <div class="k8s-panel hide" id="k8sPanel">
+          <div class="k8s-hdr"><span class="k8s-hdr-ico">☸</span><span class="k8s-hdr-ttl">Kubernetes</span><span class="k8s-live">LIVE</span></div>
+          <div class="k8s-body">
+            <div class="k8s-stl">Cluster</div>
+            <button class="k8s-cmd" data-cmd="kubectl cluster-info">▶ cluster-info</button>
+            <button class="k8s-cmd" data-cmd="kubectl config get-contexts">▶ get-contexts</button>
+            <div class="k8s-stl">Workloads</div>
+            <button class="k8s-cmd" data-cmd="kubectl get nodes -o wide">▶ get nodes -o wide</button>
+            <button class="k8s-cmd" data-cmd="kubectl get pods -A">▶ get pods -A</button>
+            <button class="k8s-cmd" data-cmd="kubectl get deployments -A">▶ get deployments -A</button>
+            <button class="k8s-cmd" data-cmd="kubectl get daemonsets -A">▶ get daemonsets -A</button>
+            <button class="k8s-cmd" data-cmd="kubectl get statefulsets -A">▶ get statefulsets -A</button>
+            <div class="k8s-stl">Networking</div>
+            <button class="k8s-cmd" data-cmd="kubectl get svc -A">▶ get svc -A</button>
+            <button class="k8s-cmd" data-cmd="kubectl get ingress -A">▶ get ingress -A</button>
+            <div class="k8s-stl">Storage</div>
+            <button class="k8s-cmd" data-cmd="kubectl get pv,pvc -A">▶ get pv,pvc</button>
+            <button class="k8s-cmd" data-cmd="kubectl get configmaps -A">▶ get configmaps</button>
+            <button class="k8s-cmd" data-cmd="kubectl get namespaces">▶ get namespaces</button>
+            <div class="k8s-stl">Observability</div>
+            <button class="k8s-cmd" data-cmd="kubectl top nodes">▶ top nodes</button>
+            <button class="k8s-cmd" data-cmd="kubectl top pods -A">▶ top pods -A</button>
+            <button class="k8s-cmd" data-cmd="kubectl get events --sort-by=.lastTimestamp">▶ get events</button>
+            <div class="k8s-stl">Helm</div>
+            <button class="k8s-cmd" data-cmd="helm list -A">⎈ helm list -A</button>
+            <button class="k8s-cmd" data-cmd="helm repo list">⎈ helm repo list</button>
+          </div>
+          <div class="k8s-foot">Context: <span id="k8sCtx" style="color:var(--blue)">—</span></div>
+        </div>
+      </div>
+
+      <!-- SYSTEM MONITOR -->
+      <div class="view" id="v-mon">
+        <div class="mon-header">
+          <span style="font-size:20px">📊</span>
+          <span class="mon-title">System Monitor</span>
+          <span class="mon-host" id="monHost">—</span>
+          <div class="mon-mode-tabs">
+            <button class="mon-mode-tab on" id="monModeLocal">🖥 This PC</button>
+            <button class="mon-mode-tab" id="monModeRemote">🌐 SSH Remote</button>
+          </div>
+          <div class="mon-status">
+            <div class="mon-dot off" id="monDot"></div>
+            <span id="monStatusTxt">Stopped</span>
+          </div>
+          <button class="mon-btn" id="monStartBtn">▶ Start</button>
+          <button class="mon-btn stop hide" id="monStopBtn">⏹ Stop</button>
+          <span class="mon-refresh-info" id="monRefreshInfo"></span>
+        </div>
+        <!-- No session message (only shown in remote mode with no session) -->
+        <div class="mon-no-sess hide" id="monNoSess">
+          <div class="ph-ico">🌐</div>
+          <div class="ph-ttl">No SSH Session</div>
+          <div class="ph-sub">Connect to an SSH session first to monitor a remote server</div>
+          <button class="btn-p" onclick="openModal(null)">＋ Add Session</button>
+        </div>
+        <!-- Stats grid -->
+        <div class="mon-body hide" id="monBody">
+          <!-- CPU -->
+          <div class="mon-card">
+            <div class="mon-card-title"><span class="mon-card-ico">⚡</span>CPU Usage</div>
+            <div class="mon-value" id="monCpuVal">—<span>%</span></div>
+            <div class="mon-bar-wrap"><div class="mon-bar cpu" id="monCpuBar" style="width:0%"></div></div>
+            <div class="mon-sub" id="monCpuSub">—</div>
+          </div>
+          <!-- Memory -->
+          <div class="mon-card">
+            <div class="mon-card-title"><span class="mon-card-ico">🧠</span>Memory</div>
+            <div class="mon-value" id="monMemVal">—<span> GB</span></div>
+            <div class="mon-bar-wrap"><div class="mon-bar mem" id="monMemBar" style="width:0%"></div></div>
+            <div class="mon-sub" id="monMemSub">—</div>
+          </div>
+          <!-- Disk -->
+          <div class="mon-card">
+            <div class="mon-card-title"><span class="mon-card-ico">💾</span>Disk Usage</div>
+            <div class="mon-value" id="monDskVal">—<span>%</span></div>
+            <div class="mon-bar-wrap"><div class="mon-bar dsk" id="monDskBar" style="width:0%"></div></div>
+            <div class="mon-sub" id="monDskSub">—</div>
+          </div>
+          <!-- Uptime & System -->
+          <div class="mon-card">
+            <div class="mon-card-title"><span class="mon-card-ico">⏱</span>System Info</div>
+            <div class="mon-uptime" id="monUptime">—</div>
+            <div class="mon-sub" id="monOsInfo">—</div>
+            <div class="mon-sub" id="monGpu" style="color:var(--blue);margin-top:4px"></div>
+          </div>
+          <!-- Network -->
+          <div class="mon-card full">
+            <div class="mon-card-title"><span class="mon-card-ico">🌐</span>Network</div>
+            <div id="monNet">—</div>
+          </div>
+          <!-- Top Processes -->
+          <div class="mon-card full">
+            <div class="mon-card-title"><span class="mon-card-ico">📋</span>Top Processes (CPU)</div>
+            <table class="mon-procs">
+              <thead><tr><th>Process</th><th>PID</th><th>CPU%</th><th>MEM%</th><th>User</th></tr></thead>
+              <tbody id="monProcs"><tr><td colspan="5" style="color:var(--txt3);text-align:center;padding:12px">No data yet</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+
+      <!-- KUBERNETES DASHBOARD -->
+      <div class="view" id="v-k8s">
+        <!-- Header -->
+        <div class="k8sd-hdr">
+          <div class="k8sd-dot"></div>
+          <span class="k8sd-title">☸ Kubernetes</span>
+          <span class="k8sd-ctx" id="k8sCtx">No context</span>
+          <select class="k8sd-ns" id="k8sNs"><option value="all">All Namespaces</option></select>
+          <button class="k8sd-btn on" id="k8sAutoRefresh" title="Auto refresh every 10s">⟳ Auto</button>
+          <button class="k8sd-btn" id="k8sRefreshBtn">↻ Refresh</button>
+          <span class="k8sd-refresh" id="k8sRefreshTime"></span>
+        </div>
+        <!-- Nav tabs -->
+        <div class="k8sd-tabs">
+          <button class="k8sd-tab on" data-k8stab="overview">Overview</button>
+          <button class="k8sd-tab" data-k8stab="nodes">Nodes</button>
+          <button class="k8sd-tab" data-k8stab="pods">Pods</button>
+          <button class="k8sd-tab" data-k8stab="deployments">Deployments</button>
+          <button class="k8sd-tab" data-k8stab="services">Services</button>
+          <button class="k8sd-tab" data-k8stab="events">Events</button>
+        </div>
+        <!-- No SSH connection state -->
+        <div class="k8sd-no-conn" id="k8sNoConn">
+          <div class="ph-ico">☸</div>
+          <div class="ph-ttl">No SSH Session</div>
+          <div class="ph-sub">Connect to an SSH session with kubectl configured to use the Kubernetes dashboard</div>
+          <button class="btn-p" onclick="openModal(null)">＋ Connect Session</button>
+        </div>
+        <!-- Dashboard body -->
+        <div class="k8sd-body hide" id="k8sBody">
+          <!-- OVERVIEW TAB -->
+          <div id="k8stab-overview">
+            <div class="k8sd-cards" id="k8sOverviewCards">
+              <div class="k8sd-card blue"><div class="k8sd-card-top"><span class="k8sd-card-ico">🖥</span><span class="k8sd-card-lbl">Nodes</span></div><div class="k8sd-card-val" id="k8sNodeCount">—</div><div class="k8sd-card-sub" id="k8sNodeReady">— ready</div></div>
+              <div class="k8sd-card green"><div class="k8sd-card-top"><span class="k8sd-card-ico">🟢</span><span class="k8sd-card-lbl">Pods</span></div><div class="k8sd-card-val" id="k8sPodCount">—</div><div class="k8sd-card-sub" id="k8sPodRunning">— running</div></div>
+              <div class="k8sd-card blue"><div class="k8sd-card-top"><span class="k8sd-card-ico">🚀</span><span class="k8sd-card-lbl">Deployments</span></div><div class="k8sd-card-val" id="k8sDepCount">—</div><div class="k8sd-card-sub" id="k8sDepReady">— ready</div></div>
+              <div class="k8sd-card yel"><div class="k8sd-card-top"><span class="k8sd-card-ico">🔌</span><span class="k8sd-card-lbl">Services</span></div><div class="k8sd-card-val" id="k8sSvcCount">—</div><div class="k8sd-card-sub">cluster services</div></div>
+              <div class="k8sd-card"><div class="k8sd-card-top"><span class="k8sd-card-ico">📂</span><span class="k8sd-card-lbl">Namespaces</span></div><div class="k8sd-card-val" id="k8sNsCount">—</div><div class="k8sd-card-sub">active</div></div>
+              <div class="k8sd-card red"><div class="k8sd-card-top"><span class="k8sd-card-ico">⚠</span><span class="k8sd-card-lbl">Failed Pods</span></div><div class="k8sd-card-val" id="k8sFailedCount">—</div><div class="k8sd-card-sub">needs attention</div></div>
+            </div>
+            <div class="k8sd-sec">Node CPU &amp; Memory</div>
+            <div class="k8sd-chart-wrap">
+              <div id="k8sNodeMetrics"><div class="k8sd-empty">Run: kubectl top nodes (requires metrics-server)</div></div>
+            </div>
+            <div class="k8sd-sec">Recent Events</div>
+            <div id="k8sRecentEvents"><div class="k8sd-empty">Loading...</div></div>
+          </div>
+          <!-- NODES TAB -->
+          <div class="hide" id="k8stab-nodes">
+            <div class="k8sd-sec">Cluster Nodes</div>
+            <div id="k8sNodesErr" class="k8sd-err hide"></div>
+            <table class="k8sd-table">
+              <thead><tr><th>Name</th><th>Status</th><th>Roles</th><th>Age</th><th>Version</th><th>OS</th><th>CPU</th><th>Memory</th></tr></thead>
+              <tbody id="k8sNodesTbl"><tr><td colspan="8" class="k8sd-empty">Loading...</td></tr></tbody>
+            </table>
+          </div>
+          <!-- PODS TAB -->
+          <div class="hide" id="k8stab-pods">
+            <div class="k8sd-sec">Pods</div>
+            <div id="k8sPodsErr" class="k8sd-err hide"></div>
+            <table class="k8sd-table">
+              <thead><tr><th>Name</th><th>Namespace</th><th>Status</th><th>Ready</th><th>Restarts</th><th>Age</th><th>Node</th></tr></thead>
+              <tbody id="k8sPodsTbl"><tr><td colspan="7" class="k8sd-empty">Loading...</td></tr></tbody>
+            </table>
+          </div>
+          <!-- DEPLOYMENTS TAB -->
+          <div class="hide" id="k8stab-deployments">
+            <div class="k8sd-sec">Deployments</div>
+            <div id="k8sDepErr" class="k8sd-err hide"></div>
+            <table class="k8sd-table">
+              <thead><tr><th>Name</th><th>Namespace</th><th>Ready</th><th>Up-to-date</th><th>Available</th><th>Age</th></tr></thead>
+              <tbody id="k8sDepTbl"><tr><td colspan="6" class="k8sd-empty">Loading...</td></tr></tbody>
+            </table>
+          </div>
+          <!-- SERVICES TAB -->
+          <div class="hide" id="k8stab-services">
+            <div class="k8sd-sec">Services</div>
+            <div id="k8sSvcErr" class="k8sd-err hide"></div>
+            <table class="k8sd-table">
+              <thead><tr><th>Name</th><th>Namespace</th><th>Type</th><th>Cluster IP</th><th>External IP</th><th>Ports</th><th>Age</th></tr></thead>
+              <tbody id="k8sSvcTbl"><tr><td colspan="7" class="k8sd-empty">Loading...</td></tr></tbody>
+            </table>
+          </div>
+          <!-- EVENTS TAB -->
+          <div class="hide" id="k8stab-events">
+            <div class="k8sd-sec">Cluster Events</div>
+            <table class="k8sd-table">
+              <thead><tr><th>Type</th><th>Reason</th><th>Object</th><th>Namespace</th><th>Message</th><th>Age</th></tr></thead>
+              <tbody id="k8sEventsTbl"><tr><td colspan="6" class="k8sd-empty">Loading...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="view ph" id="v-sftp"><div class="ph-ico">📁</div><div class="ph-ttl">SFTP Browser</div><div class="ph-sub">Connect an SSH session to browse files</div><button class="btn-p" onclick="openModal(null)">Connect Session</button></div>
+      <div class="view ph" id="v-port"><div class="ph-ico">🔀</div><div class="ph-ttl">Port Forwarding</div><div class="ph-sub">SSH tunnels — coming soon</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- SESSION MODAL -->
+<div class="overlay hide" id="modalOverlay">
+  <div class="modal">
+    <!-- Header -->
+    <div class="m-hdr">
+      <span style="font-size:16px;margin-right:8px">⌨</span>
+      <span class="m-ttl" id="mTitle">New SSH Session</span>
+      <button class="m-cls" id="mClose">✕</button>
+    </div>
+    <!-- Body -->
+    <div class="m-body">
+      <!-- Label -->
+      <div class="frow">
+        <label>Session Label</label>
+        <input id="fLabel" type="text" placeholder="e.g. Master Node" autocomplete="off">
+      </div>
+      <!-- Host + Port -->
+      <div class="frow two">
+        <div>
+          <label>Host / IP Address</label>
+          <input id="fHost" type="text" placeholder="192.168.1.10" autocomplete="off">
+        </div>
+        <div style="max-width:90px">
+          <label>Port</label>
+          <input id="fPort" type="number" value="22" min="1" max="65535">
+        </div>
+      </div>
+      <!-- Username -->
+      <div class="frow">
+        <label>Username</label>
+        <input id="fUser" type="text" placeholder="root" autocomplete="off">
+      </div>
+      <!-- Auth type -->
+      <div class="frow">
+        <label>Authentication</label>
+        <div class="auth-tabs">
+          <button class="at on" data-auth="password">🔑 Password</button>
+          <button class="at" data-auth="key">🗝 Private Key</button>
+        </div>
+      </div>
+      <!-- Password -->
+      <div class="ap" id="apPwd">
+        <div class="frow">
+          <label>Password</label>
+          <input id="fPwd" type="password" placeholder="••••••••" autocomplete="new-password">
+        </div>
+      </div>
+      <!-- Key -->
+      <div class="ap hide" id="apKey">
+        <div class="frow">
+          <label>Private Key File</label>
+          <div class="file-row">
+            <input id="fKeyPath" type="text" placeholder="~/.ssh/id_rsa" readonly>
+            <button class="btn-browse" id="btnBrowse">Browse…</button>
+          </div>
+        </div>
+        <div class="frow">
+          <label>Passphrase <span style="color:var(--txt3);font-weight:400">(optional)</span></label>
+          <input id="fPass" type="password" placeholder="Leave blank if none">
+        </div>
+      </div>
+      <!-- Color Tag -->
+      <div class="frow">
+        <label>Color Tag</label>
+        <div class="ctags" id="ctags">
+          <div class="ctag on" data-c="#39ff6e" style="background:#39ff6e" title="Green"></div>
+          <div class="ctag" data-c="#00e5ff" style="background:#00e5ff" title="Cyan"></div>
+          <div class="ctag" data-c="#ffa502" style="background:#ffa502" title="Orange"></div>
+          <div class="ctag" data-c="#ff4757" style="background:#ff4757" title="Red"></div>
+          <div class="ctag" data-c="#bc8cff" style="background:#bc8cff" title="Purple"></div>
+          <div class="ctag" data-c="#ff6b9d" style="background:#ff6b9d" title="Pink"></div>
+          <div class="ctag" data-c="#5b8fff" style="background:#5b8fff" title="Blue"></div>
+          <div class="ctag" data-c="#ffd700" style="background:#ffd700" title="Gold"></div>
+          <div class="ctag" data-c="#00e8b0" style="background:#00e8b0" title="Mint"></div>
+        </div>
+      </div>
+    </div>
+    <!-- Footer -->
+    <div class="m-foot">
+      <div>
+        <button class="btn-danger hide" id="btnDel">🗑 Delete Session</button>
+      </div>
+      <div class="m-foot-r">
+        <button class="btn-s" id="btnTest">⚡ Test</button>
+        <button class="btn-p" id="btnSave">Save &amp; Connect →</button>
+      </div>
+    </div>
+    <div class="test-res hide" id="testRes"></div>
+  </div>
+</div>
+
+<!-- COLOR PANEL -->
+<div class="cpanel" id="cpanel">
+  <div class="cp-hdr">
+    <span>🎨</span><span class="cp-ttl">Appearance</span>
+    <button class="cp-cls" id="cpClose">✕</button>
+  </div>
+  <!-- Tab switcher -->
+  <div class="cp-tabs">
+    <button class="cp-tab on" data-cptab="terminal">⌨ Terminal</button>
+    <button class="cp-tab" data-cptab="sidebar">☰ Sidebar</button>
+  </div>
+
+  <!-- TERMINAL TAB -->
+  <div class="cp-body" id="cptab-terminal">
+    <div class="cp-stl">Theme Preset</div>
+    <div class="tgrid">
+      <div class="tc on" data-t="default"><div class="tc-prev" style="background:#0c0c0c"><span style="color:#00e5ff">R</span><span style="color:#39ff6e">L</span></div><div class="tc-nm">Default</div></div>
+      <div class="tc" data-t="dracula"><div class="tc-prev" style="background:#1e1f29"><span style="color:#bd93f9">R</span><span style="color:#50fa7b">L</span></div><div class="tc-nm">Dracula</div></div>
+      <div class="tc" data-t="nord"><div class="tc-prev" style="background:#2e3440"><span style="color:#88c0d0">R</span><span style="color:#a3be8c">L</span></div><div class="tc-nm">Nord</div></div>
+      <div class="tc" data-t="monokai"><div class="tc-prev" style="background:#1e1f1c"><span style="color:#f92672">R</span><span style="color:#a6e22e">L</span></div><div class="tc-nm">Monokai</div></div>
+      <div class="tc" data-t="gruvbox"><div class="tc-prev" style="background:#1d2021"><span style="color:#fabd2f">R</span><span style="color:#b8bb26">L</span></div><div class="tc-nm">Gruvbox</div></div>
+      <div class="tc" data-t="cyber"><div class="tc-prev" style="background:#050508"><span style="color:#00fff2">R</span><span style="color:#00ff88">L</span></div><div class="tc-nm">Cyberpunk</div></div>
+      <div class="tc" data-t="solar"><div class="tc-prev" style="background:#001f27"><span style="color:#268bd2">R</span><span style="color:#859900">L</span></div><div class="tc-nm">Solarized</div></div>
+      <div class="tc" data-t="midnight"><div class="tc-prev" style="background:#0d0d1a"><span style="color:#7c83ff">R</span><span style="color:#ff6ec7">L</span></div><div class="tc-nm">Midnight</div></div>
+      <div class="tc" data-t="forest"><div class="tc-prev" style="background:#0d1a0d"><span style="color:#7fff7f">R</span><span style="color:#ffd700">L</span></div><div class="tc-nm">Forest</div></div>
+      <div class="tc" data-t="volcano"><div class="tc-prev" style="background:#1a0a00"><span style="color:#ff6b35">R</span><span style="color:#ffd700">L</span></div><div class="tc-nm">Volcano</div></div>
+      <div class="tc" data-t="ocean"><div class="tc-prev" style="background:#001b2e"><span style="color:#00cfff">R</span><span style="color:#00e8b0">L</span></div><div class="tc-nm">Ocean</div></div>
+      <div class="tc" data-t="rose"><div class="tc-prev" style="background:#1a0a0f"><span style="color:#ff7eb3">R</span><span style="color:#ffc0cb">L</span></div><div class="tc-nm">Rose</div></div>
+      <div class="tc" data-t="glass"><div class="tc-prev" style="background:rgba(255,255,255,0.08);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.2)"><span style="color:#80ffef">R</span><span style="color:#a0ffa0">L</span></div><div class="tc-nm">Glass</div></div>
+      <div class="tc" data-t="moba"><div class="tc-prev" style="background:#1a1a2e"><span style="color:#00ff88">R</span><span style="color:#5bc0de">L</span></div><div class="tc-nm">Moba</div></div>
+      <div class="tc" data-t="light"><div class="tc-prev" style="background:#f5f5f5"><span style="color:#0066cc">R</span><span style="color:#006600">L</span></div><div class="tc-nm">Light</div></div>
+    </div>
+
+    <div class="cp-stl">Terminal Font</div>
+    <select class="fsel" id="fontFam">
+      <option value="Consolas,'Courier New',monospace">Consolas</option>
+      <option value="'Courier New',monospace">Courier New</option>
+      <option value="'Lucida Console',monospace">Lucida Console</option>
+      <option value="'Fira Code',monospace">Fira Code</option>
+      <option value="'JetBrains Mono',monospace">JetBrains Mono</option>
+      <option value="'Cascadia Code',monospace">Cascadia Code</option>
+      <option value="'Source Code Pro',monospace">Source Code Pro</option>
+      <option value="'IBM Plex Mono',monospace">IBM Plex Mono</option>
+      <option value="'Hack',monospace">Hack</option>
+      <option value="'Inconsolata',monospace">Inconsolata</option>
+      <option value="'Ubuntu Mono',monospace">Ubuntu Mono</option>
+      <option value="monospace">System Mono</option>
+    </select>
+
+    <div class="cp-stl">Font Size</div>
+    <div class="font-row">
+      <button class="fpm" id="fminus">−</button>
+      <span class="fval" id="fval">13px</span>
+      <button class="fpm" id="fplus">+</button>
+    </div>
+    <div class="wheel-hint">🖱 Ctrl + Scroll over terminal</div>
+
+    <div class="cp-stl">Font Weight</div>
+    <div class="cbtns">
+      <button class="cb on" data-fw="400">Normal</button>
+      <button class="cb" data-fw="600">Semi-Bold</button>
+      <button class="cb" data-fw="700">Bold</button>
+    </div>
+
+    <div class="cp-stl">Line Height</div>
+    <div class="sl-row"><input type="range" id="lineHeightSlider" min="1" max="2" step="0.1" value="1.2"><span class="slval" id="lineHeightVal">1.2</span></div>
+
+    <div class="cp-stl">Letter Spacing</div>
+    <div class="sl-row"><input type="range" id="letterSpacingSlider" min="0" max="5" step="0.5" value="0"><span class="slval" id="letterSpacingVal">0px</span></div>
+
+    <div class="cp-stl">Cursor Style</div>
+    <div class="cbtns">
+      <button class="cb on" data-cur="block">█ Block</button>
+      <button class="cb" data-cur="bar">│ Bar</button>
+      <button class="cb" data-cur="underline">_ Line</button>
+    </div>
+
+    <div class="cp-stl">Cursor Blink</div>
+    <div class="cbtns">
+      <button class="cb on" data-blink="true">● On</button>
+      <button class="cb" data-blink="false">○ Off</button>
+    </div>
+
+    <div class="cp-stl">Scrollback Lines</div>
+    <div class="sl-row"><input type="range" id="scrollbackSlider" min="500" max="50000" step="500" value="10000"><span class="slval" id="scrollbackVal">10k</span></div>
+
+    <div class="cp-stl">Terminal Opacity</div>
+    <div class="sl-row"><input type="range" id="opSlider" min="40" max="100" value="100"><span class="slval" id="opVal">100%</span></div>
+
+    <div class="cp-stl">Custom Colors</div>
+    <div class="color-grid">
+      <div class="color-row"><label>Background</label><div class="color-pick-wrap"><input type="color" id="cpTermBg" value="#0c0c0c"><span class="color-hex" id="cpTermBgHex">#0c0c0c</span></div></div>
+      <div class="color-row"><label>Foreground</label><div class="color-pick-wrap"><input type="color" id="cpTermFg" value="#e8e8e8"><span class="color-hex" id="cpTermFgHex">#e8e8e8</span></div></div>
+      <div class="color-row"><label>Cursor</label><div class="color-pick-wrap"><input type="color" id="cpTermCursor" value="#00e5ff"><span class="color-hex" id="cpTermCursorHex">#00e5ff</span></div></div>
+      <div class="color-row"><label>Selection</label><div class="color-pick-wrap"><input type="color" id="cpTermSel" value="#00e5ff"><span class="color-hex" id="cpTermSelHex">#00e5ff</span></div></div>
+    </div>
+    <button class="cp-reset-btn" id="resetTermColors">↺ Reset to Theme</button>
+
+    <div class="cp-stl">Terminal Wallpaper</div>
+    <div class="tgrid" id="wallpaperGrid">
+      <div class="tc on" data-wp="none"><div class="tc-prev" style="background:#0c0c0c"><span style="color:#555;font-size:10px">NONE</span></div><div class="tc-nm">Off</div></div>
+      <div class="tc" data-wp="roshilabx"><div class="tc-prev" style="background:linear-gradient(135deg,#0d0d1a,#1a0a2e)"><span style="color:#7c83ff;font-size:9px;font-weight:900">RXL</span></div><div class="tc-nm">RoshiLABX</div></div>
+      <div class="tc" data-wp="matrix"><div class="tc-prev" style="background:#000"><span style="color:#39ff6e;font-size:9px;font-family:monospace">010</span></div><div class="tc-nm">Matrix</div></div>
+      <div class="tc" data-wp="cyber"><div class="tc-prev" style="background:linear-gradient(135deg,#050508,#0a0a1a)"><span style="color:#00fff2;font-size:9px">CYBER</span></div><div class="tc-nm">Cyber Grid</div></div>
+      <div class="tc" data-wp="stars"><div class="tc-prev" style="background:#000510"><span style="color:#fff;font-size:14px">✦</span></div><div class="tc-nm">Starfield</div></div>
+      <div class="tc" data-wp="neon"><div class="tc-prev" style="background:#0a000f"><span style="color:#ff6ec7;font-size:12px">◈</span></div><div class="tc-nm">Neon Pulse</div></div>
+      <div class="tc" data-wp="ashoka"><div class="tc-prev" style="background:#0a0500"><span style="color:#c8a84b;font-size:11px;font-family:serif">𑀅</span></div><div class="tc-nm">Ashoka</div></div>
+      <div class="tc" data-wp="ashokvega"><div class="tc-prev" style="background:#0a0500"><span style="color:#ffcc44;font-size:11px;font-family:serif">𑀯</span></div><div class="tc-nm">Ashoka Vega</div></div>
+    </div>
+    <div class="cp-stl">Apply To</div>
+    <div class="cbtns">
+      <button class="cb on" data-wptarget="terminal">Terminal</button>
+      <button class="cb" data-wptarget="home">Home Screen</button>
+      <button class="cb" data-wptarget="both">Both</button>
+    </div>
+
+    <div class="cp-stl">Wallpaper Opacity</div>
+    <div class="sl-row"><input type="range" id="wpOpacity" min="5" max="80" step="5" value="20"><span class="slval" id="wpOpacityVal">20%</span></div>
+
+    <div class="cp-stl">Pick Image from PC</div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <button class="cp-reset-btn" id="btnPickWallpaper" style="margin-top:0;flex:1">📁 Browse Image...</button>
+      <button class="cp-reset-btn" id="btnClearWallpaper" style="margin-top:0;width:36px;padding:7px 0" title="Clear image">✕</button>
+    </div>
+    <div id="wpImageName" style="font-size:10px;color:var(--txt3);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
+    <input type="file" id="wpFilePicker" accept="image/*" style="display:none">
+  </div>
+
+  <!-- SIDEBAR TAB -->
+  <div class="cp-body hide" id="cptab-sidebar">
+    <div class="cp-stl">Sidebar Style</div>
+    <div class="tgrid">
+      <div class="sbt on" data-sbt="dark"><div class="sbt-prev" style="background:#0c0c0c;border-left:3px solid #00e5ff"><span style="color:#e8e8e8;font-size:9px">DARK</span></div><div class="tc-nm">Dark</div></div>
+      <div class="sbt" data-sbt="darker"><div class="sbt-prev" style="background:#050505;border-left:3px solid #7c83ff"><span style="color:#e8e8e8;font-size:9px">DARKER</span></div><div class="tc-nm">Darker</div></div>
+      <div class="sbt" data-sbt="glass"><div class="sbt-prev" style="background:#ffffff18;border-left:3px solid #ffffff88"><span style="color:#fff;font-size:9px">GLASS</span></div><div class="tc-nm">Glass</div></div>
+      <div class="sbt" data-sbt="navy"><div class="sbt-prev" style="background:#0d1b2a;border-left:3px solid #00cfff"><span style="color:#e8e8e8;font-size:9px">NAVY</span></div><div class="tc-nm">Navy</div></div>
+      <div class="sbt" data-sbt="forest"><div class="sbt-prev" style="background:#0d1a0d;border-left:3px solid #7fff7f"><span style="color:#e8e8e8;font-size:9px">FOREST</span></div><div class="tc-nm">Forest</div></div>
+      <div class="sbt" data-sbt="wine"><div class="sbt-prev" style="background:#1a0a10;border-left:3px solid #ff6b9d"><span style="color:#e8e8e8;font-size:9px">WINE</span></div><div class="tc-nm">Wine</div></div>
+      <div class="sbt" data-sbt="slate"><div class="sbt-prev" style="background:#1e2a3a;border-left:3px solid #88c0d0"><span style="color:#e8e8e8;font-size:9px">SLATE</span></div><div class="tc-nm">Slate</div></div>
+      <div class="sbt" data-sbt="carbon"><div class="sbt-prev" style="background:#1a1a1a;border-left:3px solid #ffd700"><span style="color:#e8e8e8;font-size:9px">CARBON</span></div><div class="tc-nm">Carbon</div></div>
+      <div class="sbt" data-sbt="moba"><div class="sbt-prev" style="background:#1a1a2e;border-left:3px solid #00ff88"><span style="color:#00ff88;font-size:9px">MOBA</span></div><div class="tc-nm">Moba</div></div>
+      <div class="sbt" data-sbt="light"><div class="sbt-prev" style="background:#f0f2f5;border-left:3px solid #0066cc"><span style="color:#333;font-size:9px">LIGHT</span></div><div class="tc-nm">Light</div></div>
+      <div class="sbt" data-sbt="cyber"><div class="sbt-prev" style="background:#05080f;border-left:3px solid #00e5ff"><span style="color:#00e5ff;font-size:9px;font-family:monospace">CYBER</span></div><div class="tc-nm">Cyber</div></div>
+      <div class="sbt" data-sbt="neonpurple"><div class="sbt-prev" style="background:#0d0a1e;border-left:3px solid #bc8cff"><span style="color:#bc8cff;font-size:9px;font-family:monospace">PURPLE</span></div><div class="tc-nm">N.Purple</div></div>
+      <div class="sbt" data-sbt="matrix"><div class="sbt-prev" style="background:#030d03;border-left:3px solid #39ff6e"><span style="color:#39ff6e;font-size:9px;font-family:monospace">MATRIX</span></div><div class="tc-nm">Matrix</div></div>
+      <div class="sbt" data-sbt="neonred"><div class="sbt-prev" style="background:#120505;border-left:3px solid #ff4757"><span style="color:#ff4757;font-size:9px;font-family:monospace">N.RED</span></div><div class="tc-nm">N.Red</div></div>
+      <div class="sbt" data-sbt="ocean"><div class="sbt-prev" style="background:#050e1a;border-left:3px solid #00cfff"><span style="color:#00cfff;font-size:9px;font-family:monospace">OCEAN</span></div><div class="tc-nm">Ocean</div></div>
+      <div class="sbt" data-sbt="gold"><div class="sbt-prev" style="background:#110e00;border-left:3px solid #ffd700"><span style="color:#ffd700;font-size:9px;font-family:monospace">GOLD</span></div><div class="tc-nm">Gold</div></div>
+    </div>
+
+    <div class="cp-stl">Accent Color</div>
+    <div class="accent-grid">
+      <div class="accent-dot on" data-ac="#00e5ff" style="background:#00e5ff" title="Cyan"></div>
+      <div class="accent-dot" data-ac="#39ff6e" style="background:#39ff6e" title="Green"></div>
+      <div class="accent-dot" data-ac="#7c83ff" style="background:#7c83ff" title="Purple"></div>
+      <div class="accent-dot" data-ac="#ff6ec7" style="background:#ff6ec7" title="Pink"></div>
+      <div class="accent-dot" data-ac="#ffd700" style="background:#ffd700" title="Gold"></div>
+      <div class="accent-dot" data-ac="#ff6b35" style="background:#ff6b35" title="Orange"></div>
+      <div class="accent-dot" data-ac="#00cfff" style="background:#00cfff" title="Sky"></div>
+      <div class="accent-dot" data-ac="#00e8b0" style="background:#00e8b0" title="Mint"></div>
+      <div class="accent-dot" data-ac="#ff4757" style="background:#ff4757" title="Red"></div>
+      <div class="accent-dot" data-ac="#ffffff" style="background:#ffffff" title="White"></div>
+      <div class="accent-dot" data-ac="#ff0055" style="background:#ff0055" title="Neon Red"></div>
+      <div class="accent-dot" data-ac="#00fff2" style="background:#00fff2" title="Aqua"></div>
+      <div class="accent-dot" data-ac="#ff6ec7" style="background:#ff6ec7" title="Hot Pink"></div>
+      <div class="accent-dot" data-ac="#7fff00" style="background:#7fff00" title="Lime"></div>
+      <div class="accent-dot" data-ac="#ff9500" style="background:#ff9500" title="Amber"></div>
+    </div>
+    <div class="color-row" style="margin-top:8px"><label>Custom accent</label><div class="color-pick-wrap"><input type="color" id="cpAccentCustom" value="#00e5ff"><span class="color-hex" id="cpAccentCustomHex">#00e5ff</span></div></div>
+
+    <div class="cp-stl">Sidebar Font</div>
+    <select class="fsel" id="sbFontFam">
+      <option value="inherit">Same as UI (Default)</option>
+      <option value="'Segoe UI',sans-serif">Segoe UI</option>
+      <option value="'Inter',sans-serif">Inter</option>
+      <option value="'Roboto',sans-serif">Roboto</option>
+      <option value="'SF Pro Display',sans-serif">SF Pro</option>
+      <option value="'Fira Sans',sans-serif">Fira Sans</option>
+      <option value="'DM Sans',sans-serif">DM Sans</option>
+      <option value="Consolas,monospace">Consolas (Mono)</option>
+      <optgroup label="── Cyberpunk ──">
+      <option value="'Orbitron',sans-serif">Orbitron ⚡</option>
+      <option value="'Share Tech Mono',monospace">Share Tech Mono 💻</option>
+      <option value="'Rajdhani',sans-serif">Rajdhani 🔷</option>
+      <option value="'Exo 2',sans-serif">Exo 2 🚀</option>
+      <option value="'Oxanium',sans-serif">Oxanium ◈</option>
+      <option value="'Audiowide',sans-serif">Audiowide ◉</option>
+      </optgroup>
+    </select>
+
+    <div class="cp-stl">Sidebar Font Size</div>
+    <div class="sl-row"><input type="range" id="sbFontSize" min="10" max="18" step="1" value="13"><span class="slval" id="sbFontSizeVal">13px</span></div>
+
+    <div class="cp-stl">Sidebar Width</div>
+    <div class="sl-row"><input type="range" id="sbWidth" min="160" max="320" step="10" value="220"><span class="slval" id="sbWidthVal">220px</span></div>
+
+    <div class="cp-stl">Item Padding</div>
+    <div class="cbtns">
+      <button class="cb on" data-sbpad="compact">Compact</button>
+      <button class="cb" data-sbpad="normal">Normal</button>
+      <button class="cb" data-sbpad="spacious">Spacious</button>
+    </div>
+
+    <div class="cp-stl">Custom Colors</div>
+    <div class="color-grid">
+      <div class="color-row"><label>Background</label><div class="color-pick-wrap"><input type="color" id="cpSbBg" value="#0c0c0c"><span class="color-hex" id="cpSbBgHex">#0c0c0c</span></div></div>
+      <div class="color-row"><label>Text color</label><div class="color-pick-wrap"><input type="color" id="cpSbText" value="#999999"><span class="color-hex" id="cpSbTextHex">#999999</span></div></div>
+      <div class="color-row"><label>Hover bg</label><div class="color-pick-wrap"><input type="color" id="cpSbHover" value="#181818"><span class="color-hex" id="cpSbHoverHex">#181818</span></div></div>
+      <div class="color-row"><label>Border</label><div class="color-pick-wrap"><input type="color" id="cpSbBorder" value="#2a2a2a"><span class="color-hex" id="cpSbBorderHex">#2a2a2a</span></div></div>
+    </div>
+    <button class="cp-reset-btn" id="resetSbColors">↺ Reset Sidebar</button>
+  </div>
+</div>
+
+<div class="toast hide" id="toast"><div class="t-dot"></div><span id="toastMsg"></span></div>
+<script src="app.js"></script>
+<!-- Invisible corner hotspot for close -->
+<div id="cornerClose" style="position:fixed;top:0;right:0;width:20px;height:20px;z-index:9999;-webkit-app-region:no-drag;cursor:pointer" onclick="window.roshi.close()"></div>
+</body>
+</html>
