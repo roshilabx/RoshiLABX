@@ -1,0 +1,67 @@
+{
+  "name": "roshilabx",
+  "version": "1.0.0",
+  "description": "RoshiLABX - Personal Home Lab SSH Manager",
+  "author": "Roshi",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:win": "electron-builder build --win",
+    "build:portable": "electron-builder build --win portable"
+  },
+  "dependencies": {
+    "node-pty": "^1.0.0",
+    "ssh2": "^1.15.0",
+    "xterm": "^5.3.0",
+    "xterm-addon-canvas": "0.6.0-beta.37",
+    "xterm-addon-fit": "^0.8.0"
+  },
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.0.0"
+  },
+  "build": {
+    "appId": "com.roshilabx.app",
+    "productName": "RoshiLABX",
+    "icon": "assets/icon.ico",
+    "asar": true,
+    "npmRebuild": false,
+    "asarUnpack": [
+      "node_modules/node-pty/**/*",
+      "node_modules/cpu-features/**/*",
+      "node_modules/ssh2/**/*"
+    ],
+    "files": [
+      "src/**/*",
+      "node_modules/**/*",
+      "package.json",
+      "!node_modules/**/{test,tests,spec,specs,__tests__}/**",
+      "!node_modules/**/*.{md,markdown,txt,log}",
+      "!node_modules/**/README*",
+      "!node_modules/**/CHANGELOG*",
+      "!node_modules/**/{example,examples,demo,demos}/**"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  }
+}
