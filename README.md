@@ -138,7 +138,7 @@ Click "Download family", extract the zip, and copy NotoSansBrahmi-Regular.ttf in
 ### Step 1 — Clone the repository
 
 ```powershell
-git clone https://github.com/YOUR_USERNAME/RoshiLABX.git
+git clone https://github.com/roshilabx/RoshiLABX.git
 cd RoshiLABX
 ```
 
