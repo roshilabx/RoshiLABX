@@ -142,17 +142,7 @@ git clone https://github.com/roshilabx/RoshiLABX.git
 cd RoshiLABX
 ```
 
-### Step 2 — Add the Brahmi font
-
-Create a fonts/ folder in the project root and place the font file inside:
-
-```
-RoshiLABX/
-└── fonts/
-    └── NotoSansBrahmi-Regular.ttf
-```
-
-### Step 3 — Install dependencies
+### Step 2 — Install dependencies
 
 ```powershell
 npm install
@@ -166,7 +156,7 @@ If you see errors about node-pty, make sure Visual Studio Build Tools are instal
 npm start
 ```
 
-Or use the included batch file:
+Or use the included batch file: (If not just use the "npm start", else better to create installer.)
 
 ```powershell
 .\run.bat
@@ -189,12 +179,6 @@ Remove-Item -Recurse -Force "$env:LOCALAPPDATA\electron-builder\Cache\winCodeSig
 
 # Build
 npm run build:win
-```
-
-Or use the included script (run as Administrator):
-
-```powershell
-.\setup.bat
 ```
 
 ### Build Output
@@ -352,7 +336,7 @@ MIT License — see LICENSE for details.
 
 ## Author
 
-**Roshan** (𑀭𑁄𑀰𑀦)
+**Roshan Wankhede** (𑀭𑁄𑀰𑀦 𑀯𑀸𑀦𑀔𑁂𑀤𑁂)
 
 Built with love for home lab enthusiasts who live in the terminal.
 
