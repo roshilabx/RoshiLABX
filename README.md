@@ -159,12 +159,6 @@ Verify:
 python --version
 ```
 
-### 5. Noto Sans Brahmi Font (optional — for Ashoka wallpaper themes)
-
-Download: https://fonts.google.com/noto/specimen/Noto+Sans+Brahmi
-
-Click "Download family", extract the zip, and copy `NotoSansBrahmi-Regular.ttf` into the `fonts/` folder of the project.
-
 ---
 
 ## Installation and Running
