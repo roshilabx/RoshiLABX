@@ -1,11 +1,56 @@
 'use strict';
 
+// ─── Logger (must be first — captures crashes too) ────────────────────────────
+const _fs   = require('fs');
+const _path = require('path');
+const _os   = require('os');
+
+// We can't use app.getPath yet (app not ready), so build the path manually
+const _logDir  = _path.join(_os.homedir(), 'AppData', 'Roaming', 'roshilabx', 'logs');
+const _logFile = _path.join(_logDir, 'roshilabx.log');
+const _MAX_LOG_BYTES = 2 * 1024 * 1024; // 2 MB max, then rotate
+
+function _ensureLogDir() {
+  try { _fs.mkdirSync(_logDir, { recursive: true }); } catch(e) {}
+}
+
+function _rotateLog() {
+  try {
+    const stat = _fs.statSync(_logFile);
+    if (stat.size > _MAX_LOG_BYTES) {
+      const backup = _logFile.replace('.log', '.old.log');
+      if (_fs.existsSync(backup)) _fs.unlinkSync(backup);
+      _fs.renameSync(_logFile, backup);
+    }
+  } catch(e) {}
+}
+
+function log(level, category, message, data) {
+  _ensureLogDir();
+  _rotateLog();
+  const ts   = new Date().toISOString();
+  const meta = data ? ' ' + JSON.stringify(data) : '';
+  const line = `[${ts}] [${level}] [${category}] ${message}${meta}\n`;
+  try { _fs.appendFileSync(_logFile, line, 'utf8'); } catch(e) {}
+  // Also print to console for dev mode
+  if (level === 'ERROR' || level === 'CRASH') console.error(line.trim());
+  else console.log(line.trim());
+}
+
+const logger = {
+  info:  (cat, msg, data) => log('INFO',  cat, msg, data),
+  warn:  (cat, msg, data) => log('WARN',  cat, msg, data),
+  error: (cat, msg, data) => log('ERROR', cat, msg, data),
+  crash: (cat, msg, data) => log('CRASH', cat, msg, data),
+  debug: (cat, msg, data) => log('DEBUG', cat, msg, data),
+};
+
 process.on('uncaughtException', err => {
-  console.error('[CRASH]', err);
+  logger.crash('PROCESS', 'Uncaught exception — app will exit', { message: err.message, stack: err.stack });
   process.exit(1);
 });
 process.on('unhandledRejection', (reason) => {
-  console.error('[UNHANDLED]', reason);
+  logger.error('PROCESS', 'Unhandled promise rejection', { reason: String(reason) });
 });
 
 const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require('electron');
@@ -20,10 +65,14 @@ const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 
 function readJSON(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, 'utf8')); }
-  catch { return fallback; }
+  catch(e) {
+    if (e.code !== 'ENOENT') logger.warn('STORAGE', 'readJSON failed', { file, error: e.message });
+    return fallback;
+  }
 }
 function writeJSON(file, data) {
-  try { fs.writeFileSync(file, JSON.stringify(data, null, 2)); } catch (e) { console.error('writeJSON', e); }
+  try { fs.writeFileSync(file, JSON.stringify(data, null, 2)); }
+  catch (e) { logger.error('STORAGE', 'writeJSON failed', { file, error: e.message }); }
 }
 
 // ─── Known Hosts (SSH host key store) ────────────────────────────────────────
@@ -190,8 +239,10 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  logger.info('APP', 'RoshiLABX starting', { version: app.getVersion(), platform: process.platform, node: process.version });
   createWindow();
   startKnownHostsWatcher();
+  logger.info('APP', 'Window created, known hosts watcher started');
 });
 
 // Clipboard IPC handlers using Electron's native clipboard
@@ -199,18 +250,42 @@ const { clipboard } = require('electron');
 ipcMain.handle('clipboard:read',  () => clipboard.readText());
 ipcMain.handle('clipboard:write', (_, text) => { clipboard.writeText(text); return true; });
 
-app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+// ─── Logger IPC — renderer can write to log and open log file ─────────────────
+ipcMain.handle('log:write', (_, { level, category, message, data }) => {
+  log(level || 'INFO', category || 'RENDERER', message, data);
+  return true;
+});
+ipcMain.handle('log:open', () => {
+  shell.openPath(_logFile);
+  return true;
+});
+ipcMain.handle('log:path', () => _logFile);
+
+app.on('window-all-closed', () => {
+  logger.info('APP', 'All windows closed — quitting');
+  if (process.platform !== 'darwin') app.quit();
+});
 app.on('activate', () => { if (!win) createWindow(); });
 
 // ─── Window controls ──────────────────────────────────────────────────────────
 ipcMain.on('win:min',   () => win?.minimize());
 ipcMain.on('win:max',   () => win?.isMaximized() ? win.unmaximize() : win.maximize());
 ipcMain.on('win:close', () => win?.close());
+ipcMain.handle('win:opacity', (_, val) => { win?.setOpacity(Math.max(0.1, Math.min(1, val))); return true; });
+ipcMain.handle('win:get-opacity', () => win?.getOpacity() ?? 1);
 
 // ─── Sessions & settings ──────────────────────────────────────────────────────
-ipcMain.handle('sessions:load', () => readJSON(SESSIONS_FILE, []));
-ipcMain.handle('sessions:save', (_, d) => { writeJSON(SESSIONS_FILE, d); return true; });
-ipcMain.handle('settings:load', () => readJSON(SETTINGS_FILE, { theme: 'default', fontSize: 13, cursorStyle: 'block', opacity: 100 }));
+ipcMain.handle('sessions:load', () => {
+  const s = readJSON(SESSIONS_FILE, []);
+  logger.debug('STORAGE', 'Sessions loaded', { count: s.length });
+  return s;
+});
+ipcMain.handle('sessions:save', (_, d) => { writeJSON(SESSIONS_FILE, d); logger.debug('STORAGE', 'Sessions saved', { count: d.length }); return true; });
+ipcMain.handle('settings:load', () => {
+  const s = readJSON(SETTINGS_FILE, { theme: 'default', fontSize: 13, cursorStyle: 'block', opacity: 100 });
+  logger.debug('STORAGE', 'Settings loaded', { theme: s.theme });
+  return s;
+});
 ipcMain.handle('settings:save', (_, d) => { writeJSON(SETTINGS_FILE, d); return true; });
 
 // ─── Browse private key ────────────────────────────────────────────────────────
@@ -233,8 +308,11 @@ ipcMain.handle('dialog:key', async () => {
 ipcMain.handle('ssh:connect', async (event, cfg) => {
   const { tabId, host, port, username, password, privateKey, passphrase } = cfg;
 
+  logger.info('SSH', 'Connection attempt', { tabId, host, port: parseInt(port,10)||22, username });
+
   // Close existing connection on this tabId if any
   if (connections.has(tabId)) {
+    logger.info('SSH', 'Closing existing connection on tabId', { tabId });
     try { connections.get(tabId).client.end(); } catch {}
     connections.delete(tabId);
   }
@@ -253,7 +331,7 @@ ipcMain.handle('ssh:connect', async (event, cfg) => {
       host,
       port: parseInt(port, 10) || 22,
       username,
-      readyTimeout: 12000,
+      readyTimeout: 120000,
       keepaliveInterval: 20000,
       keepaliveCountMax: 5,
     };
@@ -278,28 +356,41 @@ ipcMain.handle('ssh:connect', async (event, cfg) => {
       const saved = getHostKey(host, portNum);
 
       if (saved) {
-        // Host seen before — verify fingerprint matches
         if (saved.fingerprint === fingerprint) {
-          callback(true); // known and trusted
+          logger.info('HOSTKEY', 'Fingerprint matched — trusted', { host, port: portNum, keyType });
+          callback(true);
         } else {
-          // Fingerprint mismatch — possible MITM, reject and alert
+          // Mismatch — wait for user, do NOT auto-reject
+          logger.warn('HOSTKEY', 'Fingerprint MISMATCH — prompting user', { host, port: portNum, savedFingerprint: saved.fingerprint, newFingerprint: fingerprint });
           win?.webContents.send('ssh:hostkey-mismatch', {
             tabId, host, port: portNum, fingerprint, savedFingerprint: saved.fingerprint, keyType
           });
-          callback(false);
+          ipcMain.once(`ssh:hostkey-response:${tabId}`, (_, { accepted }) => {
+            if (accepted) {
+              logger.info('HOSTKEY', 'User accepted new key after mismatch — replacing', { host, port: portNum });
+              removeHostKey(host, portNum);
+              saveHostKey(host, portNum, fingerprint, keyType);
+              callback(true);
+            } else {
+              logger.warn('HOSTKEY', 'User rejected mismatched key', { host, port: portNum });
+              callback(false);
+            }
+          });
         }
         return;
       }
 
       // Unknown host — ask user
+      logger.info('HOSTKEY', 'Unknown host — prompting user to trust', { host, port: portNum, keyType });
       win?.webContents.send('ssh:hostkey-prompt', { tabId, host, port: portNum, fingerprint, keyType });
 
-      // Wait for user response via IPC
       ipcMain.once(`ssh:hostkey-response:${tabId}`, (_, { accepted }) => {
         if (accepted) {
+          logger.info('HOSTKEY', 'User trusted new host', { host, port: portNum });
           saveHostKey(host, portNum, fingerprint, keyType);
           callback(true);
         } else {
+          logger.warn('HOSTKEY', 'User rejected unknown host', { host, port: portNum });
           callback(false);
         }
       });
@@ -310,10 +401,12 @@ ipcMain.handle('ssh:connect', async (event, cfg) => {
     });
 
     client.on('ready', () => {
+      logger.info('SSH', 'Connection established', { tabId, host, username });
       client.shell(
         { term: 'xterm-256color', cols: 220, rows: 50 },
         (err, stream) => {
           if (err) {
+            logger.error('SSH', 'Shell open failed', { tabId, host, error: err.message });
             client.end();
             return resolve({ ok: false, error: err.message });
           }
@@ -327,6 +420,7 @@ ipcMain.handle('ssh:connect', async (event, cfg) => {
             win?.webContents.send('ssh:data', { tabId, data: data.toString() });
           });
           stream.on('close', () => {
+            logger.info('SSH', 'Stream closed', { tabId, host });
             connections.delete(tabId);
             win?.webContents.send('ssh:closed', { tabId });
           });
@@ -337,6 +431,7 @@ ipcMain.handle('ssh:connect', async (event, cfg) => {
     });
 
     client.on('error', (err) => {
+      logger.error('SSH', 'Connection error', { tabId, host, error: err.message });
       connections.delete(tabId);
       resolve({ ok: false, error: err.message });
     });
@@ -360,6 +455,7 @@ ipcMain.on('ssh:input', (_, { tabId, data }) => {
 // ─── Known Hosts management ───────────────────────────────────────────────────
 ipcMain.handle('ssh:known-hosts:list', () => readKnownHosts());
 ipcMain.handle('ssh:known-hosts:remove', (_, { host, port }) => {
+  logger.info('HOSTKEY', 'Host key manually removed', { host, port });
   removeHostKey(host, parseInt(port, 10) || 22);
   return { ok: true };
 });
@@ -400,6 +496,7 @@ ipcMain.on('ssh:resize', (_, { tabId, cols, rows }) => {
 ipcMain.handle('ssh:disconnect', (_, { tabId }) => {
   const conn = connections.get(tabId);
   if (conn) {
+    logger.info('SSH', 'Disconnecting', { tabId });
     try { conn.stream?.close(); } catch {}
     try { conn.client?.end(); } catch {}
     connections.delete(tabId);
@@ -413,10 +510,16 @@ ipcMain.handle('ssh:status', (_, { tabId }) => connections.has(tabId));
 // ─── System Monitor: run command over SSH and return output ───────────────────
 ipcMain.handle('ssh:exec', (_, { tabId, cmd }) => {
   const conn = connections.get(tabId);
-  if (!conn) return { ok: false, error: 'Not connected' };
+  if (!conn) {
+    logger.warn('SSH', 'exec called but not connected', { tabId, cmd: cmd.substring(0,60) });
+    return { ok: false, error: 'Not connected' };
+  }
   return new Promise((resolve) => {
     conn.client.exec(cmd, (err, stream) => {
-      if (err) return resolve({ ok: false, error: err.message });
+      if (err) {
+        logger.error('SSH', 'exec failed', { tabId, cmd: cmd.substring(0,60), error: err.message });
+        return resolve({ ok: false, error: err.message });
+      }
       let out = '';
       stream.on('data', d => out += d.toString());
       stream.stderr.on('data', d => out += d.toString());
@@ -658,9 +761,13 @@ ipcMain.handle('localterm:start', (_, { tabId, shell: shellPref, cols, rows }) =
   }
 
   const ptyModule = getPtyModule();
-  if (!ptyModule) return { ok: false, error: 'node-pty not installed. Run: npm install node-pty' };
+  if (!ptyModule) {
+    logger.error('LOCALTERM', 'node-pty not installed', { tabId });
+    return { ok: false, error: 'node-pty not installed. Run: npm install node-pty' };
+  }
 
   const resolved = resolveShell(shellPref || 'gitbash');
+  logger.info('LOCALTERM', 'Starting local terminal', { tabId, shell: resolved.type, bin: resolved.bin });
   let cwd = os.homedir();
   try { if (!fs.existsSync(cwd)) cwd = 'C:\\'; } catch { cwd = 'C:\\'; }
 
@@ -671,18 +778,21 @@ ipcMain.handle('localterm:start', (_, { tabId, shell: shellPref, cols, rows }) =
   env.LINES   = String(rows || 24);
 
   // Git Bash specific env
-  if (resolved.type === 'gitbash') {
-    env.TERM = 'xterm-256color';
-    env.MSYSTEM = 'MINGW64';
-    env.INPUTRC = '/dev/null'; // disable readline custom config
-    env.BASH_ENV = '';
-    if (resolved.gitRoot) {
-      const gitUsr = require('path').join(resolved.gitRoot, 'usr', 'bin');
-      const gitBin = require('path').join(resolved.gitRoot, 'bin');
-      env.PATH = gitBin + ';' + gitUsr + ';' + (env.PATH || '');
-    }
-    // Git Bash uses ~/.ssh/known_hosts natively — RoshiLABX watches that file
-    // and syncs new host keys into known_hosts.json automatically.
+if (resolved.type === 'gitbash') {
+  env.TERM        = 'xterm-256color';
+  env.MSYSTEM     = 'MINGW64';
+  env.INPUTRC     = '/dev/null';
+  env.BASH_ENV    = '';
+  if (resolved.gitRoot) {
+    const gitBin     = path.join(resolved.gitRoot, 'bin');
+    const gitUsr     = path.join(resolved.gitRoot, 'usr', 'bin');
+    const gitMingw   = path.join(resolved.gitRoot, 'mingw64', 'bin');
+    const gitMingwUsr = path.join(resolved.gitRoot, 'mingw64', 'usr', 'bin');
+    env.PATH = [gitBin, gitUsr, gitMingw, gitMingwUsr, env.PATH || ''].join(';');
+  }
+  // Git Bash uses ~/.ssh/known_hosts natively — RoshiLABX watches that file
+  // and syncs new host keys into known_hosts.json automatically.
+
   }
 
   let ptyProc;
@@ -780,6 +890,7 @@ ipcMain.handle('localterm:start', (_, { tabId, shell: shellPref, cols, rows }) =
   }
 
   ptyProc.onExit(({ exitCode }) => {
+    logger.info('LOCALTERM', 'Terminal exited', { tabId, exitCode });
     localShells.delete(tabId);
     win?.webContents.send('localterm:closed', { tabId, code: exitCode });
   });

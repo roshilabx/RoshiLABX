@@ -52,4 +52,9 @@ contextBridge.exposeInMainWorld('roshi', {
   // ── Known Hosts Management ─────────────────────────────────────────────────
   listKnownHosts:  ()           => ipcRenderer.invoke('ssh:known-hosts:list'),
   removeKnownHost: (host, port) => ipcRenderer.invoke('ssh:known-hosts:remove', { host, port }),
+
+  // ── Logging ────────────────────────────────────────────────────────────────
+  logWrite: (level, category, message, data) => ipcRenderer.invoke('log:write', { level, category, message, data }),
+  logOpen:  () => ipcRenderer.invoke('log:open'),
+  logPath:  () => ipcRenderer.invoke('log:path'),
 });

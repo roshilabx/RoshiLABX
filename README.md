@@ -5,7 +5,7 @@
 **Your personal home lab SSH manager**
 
 *A cyberpunk-themed Electron desktop application for managing SSH sessions,*
-*local terminals, and Kubernetes dashboards — built for home lab engineers.*
+*local terminals, Kubernetes dashboards, and system monitoring — built for home lab engineers.*
 
 [![Platform](https://img.shields.io/badge/platform-Windows-blue?style=flat-square)](https://github.com)
 [![Electron](https://img.shields.io/badge/Electron-28.x-47848F?style=flat-square)](https://electronjs.org)
@@ -20,42 +20,76 @@
 
 ### SSH Management
 - Save and manage multiple SSH sessions (password or private key auth)
-- MobaxTerm-style host key verification — trust prompt on first connect, fingerprint stored locally
-- Host key mismatch detection — blocks connection if server key changes (MITM protection)
-- Known hosts sync — shares trust store between RoshiLABX and Git Bash OpenSSH
+- Host key verification — trust dialog on first connect, SHA256 fingerprint stored locally
+- Host key mismatch detection — prompts user when server key changes (e.g. after VM rebuild), does not auto-reject
+- Clear Host Key button in Edit Session modal — removes stale known_hosts entry without touching the terminal
+- Known hosts sync — shares trust store between RoshiLABX and Git Bash OpenSSH (watches `~/.ssh/known_hosts` for changes)
 - Multi-tab SSH sessions — open multiple connections simultaneously
+- Drag-and-drop tab reordering
 - Reconnect, disconnect, and duplicate session tabs
+- Color-coded session tags in sidebar
 
 ### Local Terminal
-- Embedded Git Bash terminal powered by node-pty (real PTY, same engine as VS Code)
-- Password auto-save — detects SSH password prompts in terminal, offers to save for next time
+- Embedded PowerShell terminal powered by node-pty (real PTY, same engine as VS Code)
+- Full xterm.js rendering with mouse support, copy on select, right-click paste
+- Password auto-save — detects SSH password prompts in the terminal, offers to save for next time
 - Auto-types saved passwords silently on future connections
-- Full xterm.js rendering with mouse support, copy/paste, font resize
+- Font resize via Ctrl+Scroll over the terminal
+- Scrollback configurable up to 50,000 lines
+
+### Terminal Transparency
+- **Terminal Background Transparency** toggle in Colors panel — makes the xterm.js area see-through to the Windows desktop behind the app
+- Independent opacity slider for the terminal background overlay (darken to keep text readable)
+- Toggle persists across restarts — enabled/disabled state saved in settings
 
 ### Kubernetes Dashboard
-- Live cluster overview with CPU/memory charts (Chart.js)
-- Node status, pod list, namespace browser
-- Quick kubectl command shortcuts
+- Live cluster overview — node count, pod count, deployment status, namespace count
+- Per-node CPU and memory bars with real-time Chart.js line graphs (last 20 data points)
+- Nodes, Pods, Deployments, Services, and Events tabs with full table views
+- Namespace filter — switch between All Namespaces and specific namespaces
+- Auto-refresh every 10 seconds with manual refresh button
+- Requires an active SSH session to the cluster master
+
+### System Monitor
+- Local Windows monitoring — CPU%, memory, disk, uptime, OS info, GPU, top processes, network adapters
+- Remote SSH monitoring — same metrics fetched from any connected Linux server over SSH
+- Switch between local and remote mode with one click
+- Refreshes every 4 seconds with live progress bars
 
 ### UI and Themes
-- Full glassmorphism across titlebar, sidebar, tabs, modals, and panels
-- 12+ colour themes including Dracula, Nord, Monokai, Cyber, Midnight, Ocean and more
-- Orbitron font logo with cyan to green gradient
-- Drag-and-drop tab reordering
-- Auto-hide sidebar with peek-on-hover
+- Glassmorphism across titlebar, sidebar, tabs, modals, and panels
+- 15+ colour themes — Default, Dracula, Nord, Monokai, Gruvbox, Cyber, Solar, Glass, Midnight, Volcano, Ocean, Rose, Forest, Gold, Matrix, Moba
+- Sidebar themes — 16 presets including Cyber, NeonPurple, Matrix, NeonRed, Ocean, Gold
+- Custom accent color picker with 15 presets
+- Custom terminal colors — background, foreground, cursor, selection
+- Font family selector including Orbitron, Share Tech Mono, Rajdhani, Exo 2, Oxanium, Audiowide
+- Font size, weight, line height, letter spacing, cursor style, cursor blink, scrollback — all adjustable
+- Wallpaper opacity and target (terminal only / home only / both)
+- Auto-hide sidebar with hover-to-peek — hover over the strip to reveal, mouse away to hide
+- Keyboard shortcut Ctrl+B to toggle sidebar
+- 📋 Log button in titlebar — opens log file directly in system editor
 
 ### Animated Wallpapers
+
 | Theme | Description |
 |-------|-------------|
-| Matrix | Classic green rain (Latin + Katakana) |
-| Cyber Grid | Perspective grid with scan line |
+| Matrix | Classic green rain — Latin + Katakana characters |
+| Cyber Grid | Perspective grid with animated scan line |
 | Starfield | Warp-speed star field |
-| Neon Pulse | Neon glow pulses |
-| RoshiLABX | Branded animated logo |
+| Neon Pulse | Neon glow ring pulses |
+| RoshiLABX | Branded animated logo with floating particles |
 | Ashoka | Ashokan Brahmi script rain — slow, readable, gold/amber |
 | Ashoka Vega | Ashokan Brahmi script rain — Matrix speed, gold/amber |
+| Custom Image | Pick any image from your PC as a wallpaper |
 
-The Ashoka themes use the complete authentic Ashokan Brahmi script (3rd century BCE) — the exact characters from Emperor Ashoka's rock edicts, rendered using the Noto Sans Brahmi font.
+The Ashoka themes use the complete authentic Ashokan Brahmi Unicode block (3rd century BCE) — the exact characters from Emperor Ashoka's rock edicts, rendered using the Noto Sans Brahmi font. Your name is embedded as a watermark: 𑀭𑁄𑀰𑀦.
+
+### Logging and Diagnostics
+- Persistent log file at `C:\Users\YourName\AppData\Roaming\roshilabx\logs\roshilabx.log`
+- Auto-rotates at 2MB — previous log saved as `roshilabx.old.log`
+- Logs: app start/stop, SSH connection attempts, host key events, local terminal start/exit, storage errors, renderer JS errors, uncaught exceptions with full stack traces
+- Never logs passwords, private keys, terminal content, or clipboard data
+- Click 📋 Log in the titlebar to open the log file instantly
 
 ---
 
@@ -107,7 +141,7 @@ Click "Download Build Tools" then run the installer and select:
 - Windows 10/11 SDK
 - MSVC v143 build tools
 
-This is required to compile node-pty which powers the Git Bash terminal. Without it the local terminal will not work.
+This is required to compile node-pty which powers the local terminal. Without it the local terminal will not work.
 
 After install, configure npm:
 ```powershell
@@ -125,11 +159,11 @@ Verify:
 python --version
 ```
 
-### 5. Noto Sans Brahmi Font
+### 5. Noto Sans Brahmi Font (optional — for Ashoka wallpaper themes)
 
 Download: https://fonts.google.com/noto/specimen/Noto+Sans+Brahmi
 
-Click "Download family", extract the zip, and copy NotoSansBrahmi-Regular.ttf into the fonts/ folder of the project.
+Click "Download family", extract the zip, and copy `NotoSansBrahmi-Regular.ttf` into the `fonts/` folder of the project.
 
 ---
 
@@ -150,13 +184,13 @@ npm install
 
 If you see errors about node-pty, make sure Visual Studio Build Tools are installed and retry.
 
-### Step 4 — Run the app
+### Step 3 — Run the app
 
 ```powershell
 npm start
 ```
 
-Or use the included batch file: (If not just use the "npm start", else better to create installer.)
+Or use the included batch file:
 
 ```powershell
 .\run.bat
@@ -183,7 +217,7 @@ npm run build:win
 
 ### Build Output
 
-After a successful build the dist/ folder contains:
+After a successful build the `dist/` folder contains:
 
 | File | Description |
 |------|-------------|
@@ -203,15 +237,19 @@ RoshiLABX/
 │   │                        # IPC handlers
 │   │                        # Known hosts store and sync
 │   │                        # Credential store
+│   │                        # Persistent logger with rotation
 │   ├── preload.js           # Context bridge (secure IPC API)
 │   └── renderer/
 │       ├── index.html       # Full UI — CSS themes, wallpapers, modals
 │       └── app.js           # Renderer logic
 │                            # Session management
-│                            # Tab system
+│                            # Tab system with drag-and-drop
 │                            # Terminal rendering (xterm.js)
-│                            # K8s dashboard and charts
+│                            # Terminal transparency toggle
+│                            # K8s dashboard and Chart.js graphs
+│                            # System monitor (local + remote)
 │                            # Wallpaper animations
+│                            # Host key trust dialogs
 │                            # Settings and themes
 ├── assets/
 │   └── icon.ico             # App icon (multi-size: 16 to 256px)
@@ -233,7 +271,7 @@ RoshiLABX/
 | Package | Version | Purpose |
 |---------|---------|---------|
 | electron | ^28.0.0 | Desktop app framework |
-| node-pty | ^1.0.0 | Real PTY for Git Bash terminal |
+| node-pty | ^1.0.0 | Real PTY for local terminal |
 | ssh2 | ^1.15.0 | SSH2 client for remote connections |
 | xterm | ^5.3.0 | Terminal emulator |
 | xterm-addon-fit | ^0.8.0 | Auto-resize terminal |
@@ -251,38 +289,52 @@ RoshiLABX/
 
 RoshiLABX stores all data locally. Nothing is sent to any external server.
 
-Windows path: C:\Users\YourName\AppData\Roaming\roshilabx\
+Windows path: `C:\Users\YourName\AppData\Roaming\roshilabx\`
 
 | File | Contents |
 |------|----------|
-| sessions.json | Saved SSH sessions |
-| settings.json | UI preferences, theme, wallpaper |
+| sessions.json | Saved SSH sessions (host, port, username, auth type) |
+| settings.json | UI preferences, theme, wallpaper, transparency |
 | known_hosts.json | Trusted SSH host fingerprints |
-| known_hosts | OpenSSH-format known hosts |
-| credentials.json | Saved SSH passwords |
-| ssh/config | Generated SSH config for Git Bash |
+| known_hosts | OpenSSH-format known hosts (for Git Bash sync) |
+| credentials.json | Saved SSH passwords (plaintext, local only) |
 | ssh_keys/ | Generated ED25519 key pairs |
+| logs/roshilabx.log | Application log — current session |
+| logs/roshilabx.old.log | Previous log (rotated when log exceeds 2MB) |
 
 ---
 
 ## Security
 
 ### Host Key Verification
-- First connection shows a trust dialog with the server SHA256 fingerprint
-- Accepted keys saved permanently
-- Key mismatch blocks connection with a warning (possible MITM attack)
+- First connection shows a trust dialog with the server's SHA256 fingerprint
+- Accepted fingerprints saved permanently to `known_hosts.json`
+- On key mismatch (e.g. after VM rebuild), a warning dialog appears — user must explicitly accept the new key
+- Mismatch does not auto-reject — connection waits for user response so the dialog is not raced by a timeout
+- "Clear Host Key" button in Edit Session removes the stored fingerprint without touching the terminal
 
 ### Known Hosts Sync
 - Trust a host in RoshiLABX — Git Bash trusts it too
-- Trust a host in Git Bash — RoshiLABX trusts it too
+- Trust a host in Git Bash — RoshiLABX picks it up automatically via file watcher
 
 ### Password Storage
-- Passwords stored only in local credentials.json
-- Never transmitted anywhere
+- Passwords stored only in local `credentials.json`
+- Never transmitted to any external service
+- Use key-based auth (Private Key tab in session editor) for passwordless login
+
+### Logging
+- Log file never contains passwords, private keys, terminal I/O, or clipboard contents
+- Only connection metadata, errors, and app lifecycle events are logged
 
 ---
 
 ## Troubleshooting
+
+### SSH shows "Host denied (verification failed)"
+The server's host key has changed (common after VM rebuild). Open Edit Session, click **🔑 Clear Host Key**, then reconnect. The trust dialog will appear with the new fingerprint.
+
+### SSH connection attempt stays at "Unknown host" with no dialog
+The host key dialog code is missing from your `app.js`. Make sure your `app.js` contains the `showHostKeyDialog` function and the `onHostKeyPrompt` / `onHostKeyMismatch` wiring inside `boot()`.
 
 ### node-pty fails to compile
 ```powershell
@@ -290,11 +342,11 @@ npm config set msvs_version 2022
 npm install
 ```
 
-### Git Bash terminal shows PowerShell instead
-Install Git for Windows from https://git-scm.com/download/win and restart the app.
+### Local terminal shows wrong shell
+RoshiLABX uses PowerShell by default for the local terminal. Install Git for Windows if you need Git Bash sessions.
 
 ### Build fails with "Cannot create symbolic link"
-Run PowerShell as Administrator before running npm run build:win.
+Run PowerShell as Administrator before running `npm run build:win`.
 
 ### Icon shows default Electron flask after install
 ```powershell
@@ -306,27 +358,35 @@ Start-Process explorer.exe
 ```
 
 ### xterm-addon-canvas version not found
-Ensure package.json has exactly:
+Ensure `package.json` has exactly:
 ```json
 "xterm-addon-canvas": "0.6.0-beta.37"
 ```
 
-### SSH connection times out
-- Check the server firewall allows port 22
-- Verify sshd is running: sudo systemctl status sshd
-- Run ssh -v user@host in Git Bash for verbose debug output
+### Checking the log file
+Click **📋 Log** in the titlebar to open the log file, or navigate to:
+```
+C:\Users\YourName\AppData\Roaming\roshilabx\logs\roshilabx.log
+```
+
+The log captures all connection attempts, host key events, errors, and crashes with timestamps and full stack traces.
 
 ---
 
 ## Roadmap
 
-- [ ] SCP file transfer panel
-- [ ] SSH key-based passwordless login
+- [ ] Pod log viewer — live streaming kubectl logs in a side panel
+- [ ] Pod shell — one-click kubectl exec into any pod from the dashboard
+- [ ] Grafana embed — webview panel pointing at your Grafana instance
+- [ ] Port forward manager — start/stop kubectl port-forward tunnels from UI
+- [ ] Helm releases tab in K8s dashboard
+- [ ] SCP / SFTP file transfer panel
 - [ ] Session groups and folders in sidebar
 - [ ] Multi-hop SSH jump host support
 - [ ] Terminal split view
 - [ ] Linux and macOS support
 
+---
 
 ## License
 

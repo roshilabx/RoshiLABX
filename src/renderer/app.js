@@ -18,7 +18,8 @@ let settings={ theme:'default', fontSize:13, cursorStyle:'block', opacity:100,
                sbTheme:'dark', sbAccent:'#00e5ff', sbFontFam:'inherit', sbFontSize:13,
                sbWidth:220, sbPad:'compact',
                sbBg:'', sbText:'', sbHover:'', sbBorder:'',
-               wallpaper:'none', wpOpacity:20, wpTarget:'terminal', customWpImage:'' };
+               wallpaper:'none', wpOpacity:20, wpTarget:'terminal', customWpImage:'',
+               winOpacity:100, termTransparent:false };
 let editSessId=null, keyContent=null, selColor='#39ff6e', selAuth='password';
 const LOCAL_PREFIX = 'local-'; // prefix for local terminal tab IDs
 let k8sOpen=false, cpOpen=false, toastTmr, fontToastTmr;
@@ -44,7 +45,8 @@ async function boot() {
     termBg:'', termFg:'', termCursor:'', termSel:'',
     sbTheme:'dark', sbAccent:'#00e5ff', sbFontFam:'inherit', sbFontSize:13,
     sbWidth:220, sbPad:'compact', sbBg:'', sbText:'', sbHover:'', sbBorder:'',
-    wallpaper:'none', wpOpacity:20, wpTarget:'terminal', customWpImage:'' }, settings);
+    wallpaper:'none', wpOpacity:20, wpTarget:'terminal', customWpImage:'',
+    winOpacity:100, termTransparent:false }, settings);
 
   applyTheme(settings.theme, false);
   $('fval').textContent = settings.fontSize + 'px';
@@ -57,6 +59,13 @@ async function boot() {
   restoreCpanelUI();
   if (settings.customWpImage) applyWallpaper('image', false);
   else if (settings.wallpaper && settings.wallpaper !== 'none') applyWallpaper(settings.wallpaper, false);
+  // Apply saved window opacity
+  if (settings.winOpacity && settings.winOpacity < 100) {
+    window.roshi.setWinOpacity(settings.winOpacity / 100);
+  }
+  if ($('winOpSlider')) { $('winOpSlider').value = settings.winOpacity || 100; $('winOpVal').textContent = (settings.winOpacity || 100) + '%'; }
+  // Apply saved terminal transparency state
+  setTimeout(() => applyTermTransparency(settings.termTransparent || false, false), 0);
 
   renderSessList();
   showView('home');
@@ -95,9 +104,88 @@ async function boot() {
     if (!tabs.length) { showView('home'); setSidebar(false, true); }
     else switchTab(activeTabId);
   });
+
+  // ── Host key: unknown host — ask to trust ────────────────────────────────
+  window.roshi.onHostKeyPrompt(({ tabId, host, port, fingerprint, keyType }) => {
+    showHostKeyDialog({
+      tabId, host, port, fingerprint, keyType,
+      title: '🔐 Unknown Host',
+      subtitle: `First connection to <b>${host}:${port}</b>.<br>Verify the fingerprint before trusting.`,
+      acceptLabel: 'Trust & Connect',
+      isNew: true,
+    });
+  });
+
+  // ── Host key: mismatch — key changed (e.g. after VM rebuild) ────────────
+  window.roshi.onHostKeyMismatch(({ tabId, host, port, fingerprint, savedFingerprint, keyType }) => {
+    showHostKeyDialog({
+      tabId, host, port, fingerprint, keyType,
+      savedFingerprint,
+      title: '⚠ Host Key Changed',
+      subtitle: `The key for <b>${host}:${port}</b> has changed since last connection.<br>
+                 This is expected after a VM rebuild or snapshot restore.<br>
+                 <span style="color:var(--txt3);font-size:11px">Old: <code>${savedFingerprint}</code></span>`,
+      acceptLabel: '✅ Trust New Key & Connect',
+      isNew: false,
+    });
+  });
 }
 
-// ── BIND ───────────────────────────────────────────────────────────────────
+// ── Host Key Trust Dialog ────────────────────────────────────────────────────
+function showHostKeyDialog({ tabId, host, port, fingerprint, keyType, savedFingerprint, title, subtitle, acceptLabel, isNew }) {
+  const existing = document.getElementById('hostKeyOverlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'hostKeyOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:#00000099;z-index:2000;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);';
+
+  const borderColor = isNew ? 'var(--cyan)' : 'var(--yel, #ffd700)';
+  const titleColor  = isNew ? 'var(--cyan)' : 'var(--yel, #ffd700)';
+
+  overlay.innerHTML = `
+    <div style="background:var(--bg);border:1px solid ${borderColor};border-radius:10px;width:500px;overflow:hidden;box-shadow:0 0 0 1px var(--bd),0 20px 60px #00000090;">
+      <div style="padding:14px 18px;border-bottom:2px solid ${borderColor};background:var(--bg2);display:flex;align-items:center;gap:8px">
+        <span style="font-size:16px">${isNew ? '🔐' : '⚠'}</span>
+        <span style="font-size:13px;font-weight:800;color:${titleColor}">${title}</span>
+      </div>
+      <div style="padding:18px">
+        <div style="font-size:12px;color:var(--txt2);margin-bottom:14px;line-height:1.7">${subtitle}</div>
+        <div style="background:var(--bg2);border:1px solid var(--bd);border-radius:6px;padding:10px 12px;font-family:monospace;font-size:11px;">
+          <div style="color:var(--txt3);margin-bottom:4px">New fingerprint (${keyType}):</div>
+          <span style="color:var(--cyan)">${fingerprint}</span>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--bd);background:var(--bg2)">
+        <button id="hkCancel" style="background:transparent;border:1px solid var(--bd2);color:var(--txt2);padding:8px 20px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">Cancel</button>
+        <button id="hkAccept" style="background:${borderColor};border:1px solid ${borderColor};color:#000;padding:8px 20px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">${acceptLabel}</button>
+      </div>
+    </div>`;
+
+  document.body.appendChild(overlay);
+
+  function dismiss() { overlay.remove(); }
+
+  overlay.querySelector('#hkCancel').onclick = () => {
+    if (window.roshi.logWrite) window.roshi.logWrite('INFO', 'HOSTKEY', 'User cancelled host key dialog', { host, port });
+    window.roshi.respondHostKey(tabId, false);
+    dismiss();
+  };
+
+  overlay.querySelector('#hkAccept').onclick = async () => {
+    if (!isNew) await window.roshi.removeKnownHost(host, port);
+    if (window.roshi.logWrite) window.roshi.logWrite('INFO', 'HOSTKEY', `User accepted host key via dialog`, { host, port, isNew });
+    window.roshi.respondHostKey(tabId, true);
+    dismiss();
+  };
+
+  overlay.addEventListener('click', e => {
+    if (e.target === overlay) {
+      window.roshi.respondHostKey(tabId, false);
+      dismiss();
+    }
+  });
+}
 function bindAll() {
   $('btnMin').onclick   = ()=>window.roshi.minimize();
   $('btnMax').onclick   = ()=>window.roshi.maximize();
@@ -105,6 +193,15 @@ function bindAll() {
   if($('btnNewSess')) $('btnNewSess').onclick = ()=>openModal(null);
   if($('btnK8s')) $('btnK8s').onclick = toggleK8s;
   $('btnColors').onclick= toggleCP;
+  if($('btnOpenLog')) $('btnOpenLog').onclick = ()=>window.roshi.logOpen();
+
+  // Renderer-side error logging — catch unhandled errors and log them
+  window.onerror = (msg, src, line, col, err) => {
+    window.roshi.logWrite('ERROR', 'RENDERER', `Unhandled error: ${msg}`, { src, line, col, stack: err?.stack });
+  };
+  window.onunhandledrejection = (e) => {
+    window.roshi.logWrite('ERROR', 'RENDERER', `Unhandled promise rejection: ${e.reason}`, {});
+  };
   $('sbAdd').onclick    = ()=>openModal(null);
   $('tabAdd').onclick = ()=>openLocalTerminal('gitbash');
   $('homeAdd').onclick  = ()=>openModal(null);
@@ -131,26 +228,48 @@ function bindAll() {
     if ((e.ctrlKey||e.metaKey) && e.key==='b') { e.preventDefault(); setSidebar(!sbHidden,true); }
   });
 
-  // Sidebar hover-to-peek
+  // Sidebar hover-to-peek — triggered by hovering the sb-strip OR the hover zone
   const hoverZone = $('sbHoverZone');
-  hoverZone.addEventListener('mouseenter', ()=>{
+  const sbStrip   = $('sbStrip');
+
+  function startPeek() {
     if (!sbHidden) return;
     clearTimeout(sbPeekTimer);
-    sbPeekTimer = setTimeout(()=>{ sbPeeking=true; $('sidebar').classList.add('peek'); }, 100);
-  });
-  hoverZone.addEventListener('mouseleave', (e)=>{
+    sbPeekTimer = setTimeout(() => {
+      sbPeeking = true;
+      $('sidebar').classList.add('peek');
+    }, 80);
+  }
+
+  function endPeek(e) {
     clearTimeout(sbPeekTimer);
-    // Only hide peek if not moving into the sidebar itself
-    if (!$('sidebar').contains(e.relatedTarget)) {
-      setTimeout(()=>{
-        if (sbPeeking && !$('sidebar').matches(':hover')) {
-          sbPeeking=false; $('sidebar').classList.remove('peek');
-        }
-      }, 50);
-    }
-  });
-  $('sidebar').addEventListener('mouseleave', ()=>{
+    // Don't close if moving into the sidebar or the strip itself
+    const rel = e.relatedTarget;
+    const sb  = $('sidebar');
+    if (sb.contains(rel) || sbStrip?.contains(rel) || rel === sb || rel === sbStrip) return;
+    setTimeout(() => {
+      if (sbPeeking && !$('sidebar').matches(':hover') && !sbStrip?.matches(':hover')) {
+        sbPeeking = false;
+        $('sidebar').classList.remove('peek');
+      }
+    }, 60);
+  }
+
+  // Hover zone (thin strip after sidebar hides)
+  hoverZone.addEventListener('mouseenter', startPeek);
+  hoverZone.addEventListener('mouseleave', endPeek);
+
+  // sb-strip hover also opens sidebar
+  if (sbStrip) {
+    sbStrip.addEventListener('mouseenter', startPeek);
+    sbStrip.addEventListener('mouseleave', endPeek);
+  }
+
+  // Sidebar mouse leave closes it
+  $('sidebar').addEventListener('mouseleave', (e) => {
     if (!sbHidden || !sbPeeking) return;
+    const rel = e.relatedTarget;
+    if (hoverZone.contains(rel) || rel === hoverZone || sbStrip?.contains(rel) || rel === sbStrip) return;
     sbPeeking = false;
     $('sidebar').classList.remove('peek');
   });
@@ -185,7 +304,30 @@ function bindAll() {
   $('fminus').onclick = ()=>applyFont(settings.fontSize-1);
   $('fplus').onclick  = ()=>applyFont(settings.fontSize+1);
   $('fontFam').onchange = e=>{ settings.fontFamily=e.target.value; tabs.forEach(t=>{if(t.term) t.term.options.fontFamily=settings.fontFamily;}); saveCfg(); };
-  $('opSlider').oninput = e=>{ settings.opacity=+e.target.value; $('opVal').textContent=settings.opacity+'%'; $('term-wrap').style.opacity=settings.opacity/100; saveCfg(); };
+  $('opSlider').oninput = e=>{
+    settings.opacity=+e.target.value;
+    $('opVal').textContent=settings.opacity+'%';
+    if (settings.termTransparent) {
+      const darkness = (100 - settings.opacity) / 100;
+      $('term-wrap').style.setProperty('--term-overlay', `rgba(0,0,0,${darkness.toFixed(2)})`);
+    } else {
+      $('term-wrap').style.opacity = settings.opacity / 100;
+    }
+    saveCfg();
+  };
+  // Window-level transparency (desktop shows through)
+  if ($('winOpSlider')) {
+    $('winOpSlider').oninput = e => {
+      settings.winOpacity = +e.target.value;
+      $('winOpVal').textContent = settings.winOpacity + '%';
+      window.roshi.setWinOpacity(settings.winOpacity / 100);
+      saveCfg();
+    };
+  }
+  // Terminal transparency toggle
+  if ($('btnTermTransp')) {
+    $('btnTermTransp').onclick = () => applyTermTransparency(!settings.termTransparent, true);
+  }
   $('lineHeightSlider').oninput = e=>{ settings.lineHeight=+e.target.value; $('lineHeightVal').textContent=e.target.value; tabs.forEach(t=>{if(t.term) t.term.options.lineHeight=settings.lineHeight;}); saveCfg(); };
   $('letterSpacingSlider').oninput = e=>{ settings.letterSpacing=+e.target.value; $('letterSpacingVal').textContent=e.target.value+'px'; tabs.forEach(t=>{if(t.term) t.term.options.letterSpacing=settings.letterSpacing;}); saveCfg(); };
   $('scrollbackSlider').oninput = e=>{ settings.scrollback=+e.target.value; $('scrollbackVal').textContent=e.target.value>=1000?(e.target.value/1000).toFixed(0)+'k':e.target.value; saveCfg(); };
@@ -486,6 +628,7 @@ function colorToHex(c) {
 function restoreCpanelUI() {
   // Restore terminal tab UI
   if ($('opSlider'))          { $('opSlider').value = settings.opacity; $('opVal').textContent = settings.opacity+'%'; }
+  if ($('winOpSlider'))       { $('winOpSlider').value = settings.winOpacity||100; $('winOpVal').textContent = (settings.winOpacity||100)+'%'; }
   if ($('lineHeightSlider'))  { $('lineHeightSlider').value = settings.lineHeight; $('lineHeightVal').textContent = settings.lineHeight; }
   if ($('letterSpacingSlider')){ $('letterSpacingSlider').value = settings.letterSpacing; $('letterSpacingVal').textContent = settings.letterSpacing+'px'; }
   if ($('scrollbackSlider'))  { $('scrollbackSlider').value = settings.scrollback; $('scrollbackVal').textContent = settings.scrollback>=1000?(settings.scrollback/1000).toFixed(0)+'k':settings.scrollback; }
@@ -552,14 +695,24 @@ function drawImageWallpaper(src) {
 }
 
 // ── WALLPAPER ENGINE ─────────────────────────────────────────────────────────
-let wpAnimFrame = null;
+let wpAnimFrames = []; // track ALL running animation frame IDs
+
+function cancelAllWpFrames() {
+  wpAnimFrames.forEach(id => cancelAnimationFrame(id));
+  wpAnimFrames = [];
+}
+
+function trackWpFrame(id) {
+  wpAnimFrames.push(id);
+  return id;
+}
 
 function applyWallpaper(wp, save) {
   if (wp !== 'image') settings.wallpaper = wp;
   $$('[data-wp]').forEach(w=>w.classList.toggle('on', w.dataset.wp===wp));
 
-  // Stop previous animation
-  if (wpAnimFrame) { cancelAnimationFrame(wpAnimFrame); wpAnimFrame = null; }
+  // Stop ALL previous animations
+  cancelAllWpFrames();
 
   const target = settings.wpTarget || 'terminal';
   const termCanvas = $('wallpaperCanvas');
@@ -726,7 +879,7 @@ function drawRoshiLABX(ctx, canvas) {
     ctx.globalAlpha = 1;
     ctx.restore();
     t++;
-    wpAnimFrame = requestAnimationFrame(draw);
+    trackWpFrame(requestAnimationFrame(draw));
   }
   draw();
 }
@@ -750,7 +903,7 @@ function drawMatrix(ctx, canvas) {
       if (y*16 > H && Math.random() > 0.975) drops[i] = 0;
       drops[i]++;
     });
-    wpAnimFrame = requestAnimationFrame(draw);
+    trackWpFrame(requestAnimationFrame(draw));
   }
   draw();
 }
@@ -803,7 +956,7 @@ function drawAshoka(ctx, canvas, fast) {
       }
     }
 
-    wpAnimFrame = requestAnimationFrame(draw);
+    trackWpFrame(requestAnimationFrame(draw));
   }
   draw();
 }
@@ -849,7 +1002,7 @@ function drawCyberGrid(ctx, canvas) {
     ctx.globalAlpha = 1;
 
     t++;
-    wpAnimFrame = requestAnimationFrame(draw);
+    trackWpFrame(requestAnimationFrame(draw));
   }
   draw();
 }
@@ -884,7 +1037,7 @@ function drawStarfield(ctx, canvas) {
     ctx.fillText('RoshiLABX', W/2, H/2);
     ctx.globalAlpha=1;
     t++;
-    wpAnimFrame = requestAnimationFrame(draw);
+    trackWpFrame(requestAnimationFrame(draw));
   }
   draw();
 }
@@ -923,7 +1076,7 @@ function drawNeonPulse(ctx, canvas) {
     ctx.fillText('RoshiLABX', cx, cy);
     ctx.globalAlpha=1;
     t++;
-    wpAnimFrame = requestAnimationFrame(draw);
+    trackWpFrame(requestAnimationFrame(draw));
   }
   draw();
 }
@@ -2079,6 +2232,29 @@ function showConfirm(title, subtitle) {
     }
     document.addEventListener('keydown', onKey);
   });
+}
+
+// ── Terminal Transparency Toggle ─────────────────────────────────────────────
+function applyTermTransparency(enabled, save) {
+  settings.termTransparent = enabled;
+  const termWrap = $('term-wrap');
+  const btn = $('btnTermTransp');
+
+  if (enabled) {
+    // Transparent: desktop shows through terminal area
+    document.body.classList.add('term-transparent');
+    tabs.forEach(t => { if (t.term) t.term.options.theme = {...xtermTheme(), background:'transparent'}; });
+    const darkness = (100 - (settings.opacity || 100)) / 100;
+    if (termWrap) termWrap.style.setProperty('--term-overlay', `rgba(0,0,0,${darkness.toFixed(2)})`);
+    if (btn) { btn.textContent = '⬛ Disable'; btn.classList.add('on'); }
+  } else {
+    // Opaque: use theme background
+    document.body.classList.remove('term-transparent');
+    tabs.forEach(t => { if (t.term) t.term.options.theme = xtermTheme(); });
+    if (termWrap) termWrap.style.setProperty('--term-overlay', 'rgba(0,0,0,0)');
+    if (btn) { btn.textContent = '⬜ Enable'; btn.classList.remove('on'); }
+  }
+  if (save) saveCfg();
 }
 
 boot();
