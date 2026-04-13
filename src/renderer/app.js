@@ -232,6 +232,7 @@ function bindAll() {
     const nav = el.dataset.nav;
     if (nav==='home') { $$('[data-nav]').forEach(e=>e.classList.remove('on')); showView('home'); }
     else if (nav==='k8sdash') { showView('k8s'); initK8sDash(); }
+    else if (nav==='monitor') { showView('mon'); }
   });
   document.addEventListener('keydown', e => {
     if ((e.ctrlKey||e.metaKey) && e.key==='b') { e.preventDefault(); setSidebar(!sbHidden,true); }
@@ -289,6 +290,7 @@ function bindAll() {
     const nav = el.dataset.nav;
     if (nav==='k8s') { showView('term'); if(el.dataset.cmd) sendCmd(el.dataset.cmd+'\r'); }
     else if (nav==='home') showView('home');
+    else if (nav==='monitor') showView('mon');
     else navTo(nav);
     // Auto-close sidebar on mobile-ish or if peeking
     if (sbHidden && sbPeeking) { sbPeeking=false; $('sidebar').classList.remove('peek'); }
@@ -1120,7 +1122,11 @@ function showView(id) {
     setTimeout(()=>{ try{activeT()?.fit?.fit();}catch(e){} },80);
   }
   // Update monitor view state
-  if (id==='mon') updateMonitorView();
+  if (id==='mon') {
+    updateMonitorView();
+    // Auto-start local monitor if not already running
+    if (!monRunning && monMode === 'local') startMonitor();
+  }
   if (id==='k8s') { /* handled by initK8sDash */ }
 }
 
@@ -1128,6 +1134,7 @@ function navTo(v) {
   $$('[data-nav]').forEach(e=>e.classList.remove('on'));
   document.querySelector(`[data-nav="${v}"]`)?.classList.add('on');
   if (v === 'k8sdash') { showView('k8s'); initK8sDash(); }
+  else if (v === 'monitor') showView('mon');
   else showView(v);
 }
 
