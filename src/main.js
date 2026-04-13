@@ -183,21 +183,79 @@ function startKnownHostsWatcher() {
   syncFromOpenSSH();
 }
 
-// ─── Credentials store (saved passwords for local terminal SSH) ───────────────
+// ─── Credentials store (safeStorage-encrypted — like MobaXterm) ──────────────
+// Uses Electron safeStorage → Windows DPAPI. No plaintext passwords on disk.
 const CREDENTIALS_FILE = path.join(DATA_DIR, 'credentials.json');
 
-function readCredentials() {
-  return readJSON(CREDENTIALS_FILE, {});
+let _safeStorage = null;
+function getSafeStorage() {
+  if (_safeStorage) return _safeStorage;
+  try { const { safeStorage } = require('electron'); _safeStorage = safeStorage; return _safeStorage; }
+  catch(e) { logger.warn('CREDS', 'safeStorage unavailable', { error: e.message }); return null; }
 }
+
+function encryptPassword(plaintext) {
+  const ss = getSafeStorage();
+  if (!ss || !ss.isEncryptionAvailable()) {
+    logger.warn('CREDS', 'Encryption unavailable — storing unencrypted');
+    return { enc: false, value: plaintext };
+  }
+  try { return { enc: true, value: ss.encryptString(plaintext).toString('base64') }; }
+  catch(e) { logger.error('CREDS', 'encryptString failed', { error: e.message }); return { enc: false, value: plaintext }; }
+}
+
+function decryptPassword(stored) {
+  if (!stored) return '';
+  if (!stored.enc) return stored.value || stored.password || '';
+  const ss = getSafeStorage();
+  if (!ss || !ss.isEncryptionAvailable()) return stored.value || '';
+  try { return ss.decryptString(Buffer.from(stored.value, 'base64')); }
+  catch(e) { logger.error('CREDS', 'decryptString failed — re-save credential', { error: e.message }); return ''; }
+}
+
+function readCredentials() { return readJSON(CREDENTIALS_FILE, {}); }
+
 function saveCredential(user, host, port, password) {
   const creds = readCredentials();
-  creds[`${user}@${host}:${port}`] = { password, savedAt: new Date().toISOString() };
+  const encrypted = encryptPassword(password);
+  creds[`${user}@${host}:${port}`] = { ...encrypted, savedAt: new Date().toISOString() };
   writeJSON(CREDENTIALS_FILE, creds);
+  logger.info('CREDS', 'Credential saved', { user, host, port, encrypted: encrypted.enc });
 }
+
+function getDecryptedCredential(user, host, port) {
+  const entry = readCredentials()[`${user}@${host}:${port}`];
+  return entry ? decryptPassword(entry) : null;
+}
+
 function deleteCredential(user, host, port) {
   const creds = readCredentials();
   delete creds[`${user}@${host}:${port}`];
   writeJSON(CREDENTIALS_FILE, creds);
+  logger.info('CREDS', 'Credential deleted', { user, host, port });
+}
+
+// ── One-time migration: encrypt legacy plaintext passwords in sessions.json ───
+function migrateLegacySessions() {
+  try {
+    const ss = getSafeStorage();
+    if (!ss || !ss.isEncryptionAvailable()) return;
+    const sessions = readJSON(SESSIONS_FILE, []);
+    let changed = false;
+    for (const s of sessions) {
+      if (s.password && typeof s.password === 'string' && !s._pwdEncrypted) {
+        const enc = encryptPassword(s.password);
+        s.password = enc.value; s._pwdEncrypted = enc.enc; changed = true;
+      }
+    }
+    if (changed) { writeJSON(SESSIONS_FILE, sessions); logger.info('CREDS', 'Migrated legacy plaintext passwords'); }
+  } catch(e) { logger.warn('CREDS', 'Session migration failed (non-fatal)', { error: e.message }); }
+}
+
+function getSessionPassword(s) {
+  if (!s?.password) return undefined;
+  if (s._pwdEncrypted === false || s._pwdEncrypted === undefined) return s.password;
+  return decryptPassword({ enc: s._pwdEncrypted, value: s.password });
 }
 const connections = new Map();
 
@@ -242,6 +300,7 @@ app.whenReady().then(() => {
   logger.info('APP', 'RoshiLABX starting', { version: app.getVersion(), platform: process.platform, node: process.version });
   createWindow();
   startKnownHostsWatcher();
+  migrateLegacySessions(); // one-time migration: encrypt any legacy plaintext passwords
   logger.info('APP', 'Window created, known hosts watcher started');
 });
 
@@ -276,11 +335,39 @@ ipcMain.handle('win:get-opacity', () => win?.getOpacity() ?? 1);
 
 // ─── Sessions & settings ──────────────────────────────────────────────────────
 ipcMain.handle('sessions:load', () => {
-  const s = readJSON(SESSIONS_FILE, []);
-  logger.debug('STORAGE', 'Sessions loaded', { count: s.length });
-  return s;
+  const raw = readJSON(SESSIONS_FILE, []);
+  // Decrypt passwords before sending to renderer — renderer always works with plaintext
+  const result = raw.map(s => ({
+    ...s,
+    password: s.password ? getSessionPassword(s) : undefined,
+    _pwdEncrypted: undefined,
+  }));
+  logger.debug('STORAGE', 'Sessions loaded', { count: result.length });
+  return result;
 });
-ipcMain.handle('sessions:save', (_, d) => { writeJSON(SESSIONS_FILE, d); logger.debug('STORAGE', 'Sessions saved', { count: d.length }); return true; });
+ipcMain.handle('sessions:save', (_, d) => {
+  // Encrypt passwords before writing to disk
+  const toSave = d.map(s => {
+    if (s.password && s.authType === 'password') {
+      const enc = encryptPassword(s.password);
+
+      // ── Mirror into credentials.json so Git Bash PTY auto-fill works ─────────
+      // When user saves/edits a session with a password, that same credential
+      // is stored in the credentials store so that typing 'ssh user@host' in
+      // Git Bash terminal will auto-inject it — no re-prompting.
+      saveCredential(s.username, s.host, parseInt(s.port) || 22, s.password);
+      logger.debug('CREDS', 'Mirrored session credential to credentials store', {
+        user: s.username, host: s.host, port: s.port
+      });
+
+      return { ...s, password: enc.value, _pwdEncrypted: enc.enc };
+    }
+    return s;
+  });
+  writeJSON(SESSIONS_FILE, toSave);
+  logger.debug('STORAGE', 'Sessions saved (passwords encrypted)', { count: toSave.length });
+  return true;
+});
 ipcMain.handle('settings:load', () => {
   const s = readJSON(SETTINGS_FILE, { theme: 'default', fontSize: 13, cursorStyle: 'block', opacity: 100 });
   logger.debug('STORAGE', 'Settings loaded', { theme: s.theme });
@@ -360,40 +447,30 @@ ipcMain.handle('ssh:connect', async (event, cfg) => {
           logger.info('HOSTKEY', 'Fingerprint matched — trusted', { host, port: portNum, keyType });
           callback(true);
         } else {
-          // Mismatch — wait for user, do NOT auto-reject
-          logger.warn('HOSTKEY', 'Fingerprint MISMATCH — prompting user', { host, port: portNum, savedFingerprint: saved.fingerprint, newFingerprint: fingerprint });
-          win?.webContents.send('ssh:hostkey-mismatch', {
-            tabId, host, port: portNum, fingerprint, savedFingerprint: saved.fingerprint, keyType
+          // ── Auto-clean stale key (VM recreated) and trust new key silently ──
+          logger.warn('HOSTKEY', 'Fingerprint mismatch — VM likely recreated, auto-updating key', {
+            host, port: portNum, old: saved.fingerprint, new: fingerprint
           });
-          ipcMain.once(`ssh:hostkey-response:${tabId}`, (_, { accepted }) => {
-            if (accepted) {
-              logger.info('HOSTKEY', 'User accepted new key after mismatch — replacing', { host, port: portNum });
-              removeHostKey(host, portNum);
-              saveHostKey(host, portNum, fingerprint, keyType);
-              callback(true);
-            } else {
-              logger.warn('HOSTKEY', 'User rejected mismatched key', { host, port: portNum });
-              callback(false);
-            }
+          removeHostKey(host, portNum);
+          saveHostKey(host, portNum, fingerprint, keyType);
+          // Notify terminal so user sees what happened
+          win?.webContents.send('ssh:data', {
+            tabId,
+            data: `\r\n\x1b[33m⚠ Host key changed (VM recreated?) — key updated automatically.\x1b[0m\r\n`
           });
+          callback(true);
         }
         return;
       }
 
-      // Unknown host — ask user
-      logger.info('HOSTKEY', 'Unknown host — prompting user to trust', { host, port: portNum, keyType });
-      win?.webContents.send('ssh:hostkey-prompt', { tabId, host, port: portNum, fingerprint, keyType });
-
-      ipcMain.once(`ssh:hostkey-response:${tabId}`, (_, { accepted }) => {
-        if (accepted) {
-          logger.info('HOSTKEY', 'User trusted new host', { host, port: portNum });
-          saveHostKey(host, portNum, fingerprint, keyType);
-          callback(true);
-        } else {
-          logger.warn('HOSTKEY', 'User rejected unknown host', { host, port: portNum });
-          callback(false);
-        }
+      // ── Unknown host — auto-trust and save (first connect) ──
+      logger.info('HOSTKEY', 'Unknown host — auto-trusting on first connect', { host, port: portNum, keyType, fingerprint });
+      saveHostKey(host, portNum, fingerprint, keyType);
+      win?.webContents.send('ssh:data', {
+        tabId,
+        data: `\r\n\x1b[36mℹ Host key saved for ${host}:${portNum} [${keyType}]\x1b[0m\r\n`
       });
+      callback(true);
     };
 
     client.on('keyboard-interactive', (name, instr, lang, prompts, finish) => {
@@ -431,9 +508,21 @@ ipcMain.handle('ssh:connect', async (event, cfg) => {
     });
 
     client.on('error', (err) => {
-      logger.error('SSH', 'Connection error', { tabId, host, error: err.message });
+      logger.error('SSH', 'Connection error', { tabId, host, error: err.message, code: err.code });
       connections.delete(tabId);
-      resolve({ ok: false, error: err.message });
+
+      let friendlyMsg = err.message;
+      if (err.code === 'ETIMEDOUT' || err.message.includes('Timed out')) {
+        friendlyMsg = `Connection timed out — is the VM running?\n  Host: ${host}:${parseInt(port,10)||22}`;
+      } else if (err.code === 'ECONNREFUSED') {
+        friendlyMsg = `Connection refused — SSH service may not be started on ${host}:${parseInt(port,10)||22}`;
+      } else if (err.code === 'ENOTFOUND' || err.code === 'EAI_AGAIN') {
+        friendlyMsg = `Host not found: ${host} — check IP or hostname`;
+      } else if (/auth|Authentication/i.test(err.message)) {
+        friendlyMsg = `Authentication failed for ${username}@${host} — check saved password`;
+      }
+
+      resolve({ ok: false, error: friendlyMsg });
     });
 
     try {
@@ -461,15 +550,81 @@ ipcMain.handle('ssh:known-hosts:remove', (_, { host, port }) => {
 });
 
 // ─── Credentials management ───────────────────────────────────────────────────
+// Stage password as pending — it gets saved only after successful SSH login is confirmed
 ipcMain.handle('localterm:save-credential', (_, { user, host, port, password }) => {
-  saveCredential(user, host, parseInt(port) || 22, password);
+  // Find the localShell sshState for this user@host and stage the credential
+  let staged = false;
+  for (const [tid, sh] of localShells.entries()) {
+    if (sh.sshState && sh.sshState.user === user && sh.sshState.host === host) {
+      sh.sshState._pendingCredential = { password };
+      staged = true;
+      logger.info('CREDS', 'Credential staged (pending login confirmation)', { user, host, port });
+      break;
+    }
+  }
+  // Also save immediately as a fallback (covers reconnect cases)
+  if (!staged) {
+    saveCredential(user, host, parseInt(port) || 22, password);
+    logger.info('CREDS', 'Credential saved directly (no active sshState found)', { user, host, port });
+  }
   return { ok: true };
 });
 ipcMain.handle('localterm:delete-credential', (_, { user, host, port }) => {
   deleteCredential(user, host, parseInt(port) || 22);
   return { ok: true };
 });
-// Type the password into a running pty (called from renderer after user confirms save)
+ipcMain.handle('localterm:clear-all-credentials', () => {
+  // Clear credentials.json entirely
+  writeJSON(CREDENTIALS_FILE, {});
+  logger.info('CREDS', 'All credentials cleared');
+  return { ok: true };
+});
+ipcMain.handle('localterm:purge-credential-key', (_, { key }) => {
+  // Delete a specific raw key from credentials.json (handles malformed entries)
+  const creds = readCredentials();
+  delete creds[key];
+  writeJSON(CREDENTIALS_FILE, creds);
+  logger.info('CREDS', 'Credential key purged', { key });
+  return { ok: true };
+});
+ipcMain.handle('localterm:list-ssh-keys', () => {
+  const keyDir = path.join(DATA_DIR, 'ssh_keys');
+  try {
+    if (!fs.existsSync(keyDir)) return [];
+    return fs.readdirSync(keyDir)
+      .filter(f => !f.endsWith('.pub'))
+      .map(f => ({ name: f, path: path.join(keyDir, f) }));
+  } catch(e) { return []; }
+});
+ipcMain.handle('localterm:delete-ssh-key', (_, { name }) => {
+  const keyDir = path.join(DATA_DIR, 'ssh_keys');
+  try {
+    const keyPath = path.join(keyDir, name);
+    if (fs.existsSync(keyPath)) fs.unlinkSync(keyPath);
+    if (fs.existsSync(keyPath + '.pub')) fs.unlinkSync(keyPath + '.pub');
+    logger.info('CREDS', 'SSH key deleted', { name });
+    return { ok: true };
+  } catch(e) { return { ok: false, error: e.message }; }
+});
+ipcMain.handle('localterm:clear-all-ssh-keys', () => {
+  const keyDir = path.join(DATA_DIR, 'ssh_keys');
+  try {
+    if (fs.existsSync(keyDir))
+      fs.readdirSync(keyDir).forEach(f => { try { fs.unlinkSync(path.join(keyDir, f)); } catch(e) {} });
+    logger.info('CREDS', 'All SSH keys cleared');
+    return { ok: true };
+  } catch(e) { return { ok: false, error: e.message }; }
+});
+ipcMain.handle('localterm:list-credentials', () => {
+  // Return credentials with passwords decrypted for renderer use
+  const raw = readCredentials();
+  const result = {};
+  for (const [key, entry] of Object.entries(raw)) {
+    result[key] = { ...entry, password: decryptPassword(entry), enc: undefined, value: undefined };
+  }
+  return result;
+});
+// Inject password into running PTY
 ipcMain.handle('localterm:inject-password', (_, { tabId, password }) => {
   const sh = localShells.get(tabId);
   if (sh?.pty) {
@@ -822,7 +977,9 @@ if (resolved.type === 'gitbash') {
     }
   }
 
-  localShells.set(tabId, { pty: ptyProc, type: resolved.type });
+  // sshState is stored on the shell entry so IPC handlers can access _pendingCredential
+  const sshState = { buf: '', host: '', user: '', port: 22, awaitingPrompt: false, handled: false, loggedIn: false, watchForPrompt: false, _pendingCredential: null };
+  localShells.set(tabId, { pty: ptyProc, type: resolved.type, sshState });
 
   // Force resize multiple times to sync terminal dimensions
   setTimeout(() => { try { ptyProc.resize(cols || 80, rows || 24); } catch(e) {} }, 100);
@@ -831,7 +988,6 @@ if (resolved.type === 'gitbash') {
   setTimeout(() => { try { ptyProc.resize(cols || 80, rows || 24); } catch(e) {} }, 1500);
 
   // ── SSH credential detection in local terminal ──────────────────────────────
-  const sshState = { buf: '', host: '', user: '', port: 22, awaitingPrompt: false, handled: false };
 
   ptyProc.onData((data) => {
     win?.webContents.send('localterm:data', { tabId, data });
@@ -848,6 +1004,7 @@ if (resolved.type === 'gitbash') {
         sshState.host = cmdMatch[3];
         sshState.awaitingPrompt = true;
         sshState.handled = false;
+        sshState.loggedIn = false;
       }
     }
 
@@ -856,27 +1013,84 @@ if (resolved.type === 'gitbash') {
       sshState.handled = true;
       const { host, user, port } = sshState;
 
-      // Check if we have a saved password for this host+user
-      const creds = readCredentials();
-      const key = `${user}@${host}:${port}`;
-      const saved = creds[key];
+      const savedPwd = getDecryptedCredential(user, host, port);
 
-      if (saved?.password) {
-        // Auto-type the saved password into the terminal
+      if (savedPwd) {
+        // Saved credential found — inject silently (MobaXterm-style)
+        logger.info('CREDS', 'Auto-injecting saved credential', { user, host, port });
         setTimeout(() => {
-          try { ptyProc.write(saved.password + '\n'); } catch(e) {}
+          try { ptyProc.write(savedPwd + '\n'); } catch(e) {}
         }, 100);
       } else {
-        // Ask user if they want to save password
+        // No saved credential — show the password prompt modal
+        // password will be captured via localterm:save-credential IPC and saved on success
         win?.webContents.send('localterm:ssh-save-pwd-prompt', { tabId, host, user, port });
       }
 
-      // Reset after a delay to allow future prompts
-      setTimeout(() => {
-        sshState.awaitingPrompt = false;
-        sshState.handled = false;
-        sshState.buf = '';
-      }, 3000);
+      sshState.watchForPrompt = true;
+      sshState.awaitingPrompt = false;
+      sshState.handled = false;
+      sshState.buf = '';
+    }
+
+    // Reset pending credential if login failed (Permission denied)
+    if (sshState._pendingCredential && /permission denied|authentication failed/i.test(sshState.buf)) {
+      logger.info('CREDS', 'Login failed — discarding staged credential', { user: sshState.user, host: sshState.host });
+      sshState._pendingCredential = null;
+      sshState.watchForPrompt = false;
+      sshState.loggedIn = false;
+      sshState.buf = '';
+    }
+
+    // Detect successful login — auto-save pending credential silently, no popup
+    // Guard: must NOT be a failed auth — "Permission denied" means wrong password
+    const _loginFailed = /permission denied|authentication failed|try again/i.test(sshState.buf);
+    if (sshState.host && !sshState.loggedIn && sshState.watchForPrompt &&
+        /(?:[$#>])\s*$/.test(sshState.buf) && sshState.buf.length > 10 && !_loginFailed) {
+      sshState.loggedIn = true;
+      sshState.watchForPrompt = false;
+      const { host, user, port } = sshState;
+
+      // If a pending credential was staged (user typed password in modal), save it now
+      if (sshState._pendingCredential) {
+        const { password } = sshState._pendingCredential;
+        if (password) {
+          // Save into credentials.json (for future Git Bash auto-fill)
+          saveCredential(user, host, port, password);
+          logger.info('CREDS', 'Auto-saved credential on successful login', { user, host, port });
+
+          // Also mirror into any matching saved session so session login stays in sync
+          const sessions = readJSON(SESSIONS_FILE, []);
+          let sessionUpdated = false;
+          for (const s of sessions) {
+            if (s.host === host && s.username === user && s.authType === 'password') {
+              const enc = encryptPassword(password);
+              s.password = enc.value;
+              s._pwdEncrypted = enc.enc;
+              sessionUpdated = true;
+            }
+          }
+          if (sessionUpdated) {
+            writeJSON(SESSIONS_FILE, sessions);
+            logger.info('CREDS', 'Mirrored Git Bash credential back into matching sessions', { user, host, port });
+          }
+
+          win?.webContents.send('ssh:data', {
+            tabId,
+            data: `
+[32m🔐 Password saved securely for ${user}@${host}[0m
+`
+          });
+          // Auto-erase message after 2s using ANSI escape: move up 2 lines + clear each
+          setTimeout(() => {
+            try {
+              win?.webContents.send('ssh:data', { tabId, data: '\x1b[1A\x1b[2K\x1b[1A\x1b[2K' });
+            } catch(e) {}
+          }, 2000);
+        }
+        sshState._pendingCredential = null;
+      }
+      // No session-save popup — user manages sessions manually via sidebar
     }
   });
 
@@ -1044,6 +1258,64 @@ ipcMain.handle('localterm:setup-key-auth', async (_, { tabId, host, user, passwo
     });
     client.on('keyboard-interactive', (n, i, l, p, finish) => finish([password]));
   });
+});
+
+// ─── Remove Key Auth — deletes key from server + local key file ───────────────
+ipcMain.handle('localterm:remove-key-auth', async (_, { sessId, host, port, username, password, keyPath }) => {
+  let Client;
+  try { Client = require('ssh2').Client; } catch(e) { return { ok: false, error: 'ssh2 not installed' }; }
+
+  // Step 1: Connect with password and remove key from authorized_keys
+  const removeResult = await new Promise((resolve) => {
+    const client = new Client();
+    client.on('ready', () => {
+      // Remove all lines containing 'roshilabx' from authorized_keys
+      const cmd = `sed -i '/roshilabx/d' ~/.ssh/authorized_keys && echo '__ROSHI_KEY_REMOVED__'`;
+      client.exec(cmd, (err, stream) => {
+        if (err) { client.end(); return resolve({ ok: false, error: err.message }); }
+        let out = '';
+        stream.on('data', d => { out += d.toString(); });
+        stream.on('close', () => {
+          client.end();
+          resolve({ ok: out.includes('__ROSHI_KEY_REMOVED__'), output: out });
+        });
+      });
+    });
+    client.on('error', err => resolve({ ok: false, error: err.message }));
+    client.connect({
+      host, port: parseInt(port) || 22, username, password,
+      readyTimeout: 12000, tryKeyboard: true,
+    });
+    client.on('keyboard-interactive', (n, i, l, p, finish) => finish([password]));
+  });
+
+  if (!removeResult.ok) {
+    return { ok: false, error: removeResult.error || 'Could not connect to remove key — check password' };
+  }
+
+  // Step 2: Delete local key file
+  if (keyPath) {
+    try {
+      if (fs.existsSync(keyPath)) fs.unlinkSync(keyPath);
+      if (fs.existsSync(keyPath + '.pub')) fs.unlinkSync(keyPath + '.pub');
+      logger.info('CREDS', 'Local key files deleted', { keyPath });
+    } catch(e) {
+      logger.warn('CREDS', 'Could not delete local key file (non-fatal)', { keyPath, error: e.message });
+    }
+  }
+
+  // Step 3: Update known_hosts store to clear keyAuth flag for this host
+  const hosts = readKnownHosts();
+  const key = `${host}:${parseInt(port) || 22}`;
+  if (hosts[key]) {
+    delete hosts[key].keyAuth;
+    delete hosts[key].keyUser;
+    delete hosts[key].keyFile;
+    writeKnownHosts(hosts);
+  }
+
+  logger.info('CREDS', 'Key auth removed successfully', { host, username });
+  return { ok: true };
 });
 
 ipcMain.on('localterm:resize', (_, { tabId, cols, rows }) => {

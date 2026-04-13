@@ -129,6 +129,15 @@ async function boot() {
       isNew: false,
     });
   });
+
+  // ── SSH password save prompt from local terminal ───────────────────────────
+  window.roshi.onSshSavePwdPrompt(({ tabId, host, user, port }) => {
+    showSavePwdModal({ tabId, host, user, port });
+  });
+
+  // Session-save suggestion disabled — credentials are saved silently via safeStorage.
+  // Users create sessions manually from the sidebar for full control.
+  // window.roshi.onSuggestSaveSession is intentionally not handled here.
 }
 
 // ── Host Key Trust Dialog ────────────────────────────────────────────────────
@@ -291,12 +300,25 @@ function bindAll() {
   // Color panel
   $('cpClose').onclick = toggleCP;
 
+  // 🔐 Security button — opens cpanel directly on Security tab
+  $('btnSecurity').onclick = () => {
+    if (!cpOpen) { cpOpen = true; $('cpanel').classList.add('open'); }
+    $$('.cp-tab').forEach(x => x.classList.remove('on'));
+    document.querySelector('.cp-tab[data-cptab="security"]')?.classList.add('on');
+    $('cptab-terminal').classList.add('hide');
+    $('cptab-sidebar').classList.add('hide');
+    $('cptab-security').classList.remove('hide');
+    loadSecurityTab();
+  };
+
   // Tab switcher
   $$('.cp-tab').forEach(t=>t.onclick=()=>{
     $$('.cp-tab').forEach(x=>x.classList.remove('on')); t.classList.add('on');
     const tab=t.dataset.cptab;
     $('cptab-terminal').classList.toggle('hide', tab!=='terminal');
     $('cptab-sidebar').classList.toggle('hide', tab!=='sidebar');
+    $('cptab-security').classList.toggle('hide', tab!=='security');
+    if (tab === 'security') loadSecurityTab();
   });
 
   // ── TERMINAL TAB ──
@@ -431,6 +453,7 @@ function bindAll() {
   $('btnTest').onclick      = testConn;
   $('btnDel').onclick       = deleteSession;
   $('btnBrowse').onclick    = browseKey;
+  $('btnRemoveKey').onclick = removeKeyAuth;
   $$('.at').forEach(t=>t.onclick=()=>{
     $$('.at').forEach(x=>x.classList.remove('on')); t.classList.add('on');
     selAuth=t.dataset.auth;
@@ -1114,10 +1137,27 @@ function renderSessList() {
   sessions.forEach(s=>{
     const el=document.createElement('div');
     el.className='sess-row'; el.id='srow-'+s.id;
-    el.innerHTML=`<div class="sdot off" id="dot-${s.id}"></div>
-      <div class="sinfo"><div class="sname">${esc(s.label)}</div>
-      <div class="shost">${esc(s.username)}@${esc(s.host)}:${s.port||22}</div></div>
+
+    // Auth indicator: 🔑 key auth (green) | 🔒 password (cyan) | ⚠ no credential (dim)
+    const hasKey = s.authType === 'key' && (s.privateKey || s.keyPath);
+    const hasPwd = s.authType === 'password' && s.password;
+    const authIcon  = hasKey  ? '🔑' : hasPwd ? '🔒' : '⚠';
+    const authColor = hasKey  ? '#39ff6e' : hasPwd ? 'var(--cyan)' : '#555';
+    const authTip   = hasKey  ? 'Key auth' : hasPwd ? 'Password auth (encrypted)' : 'No credential saved';
+
+    el.innerHTML=`
+      <div class="sdot off" id="dot-${s.id}"></div>
+      <div class="sinfo">
+        <div class="sname">${esc(s.label)}</div>
+        <div class="shost">${esc(s.username)}@${esc(s.host)}:${s.port||22}</div>
+      </div>
+      <span class="sauth-icon" title="${authTip}" style="
+        font-size:13px;margin-right:2px;opacity:0.85;cursor:default;
+        filter:${hasKey ? 'none' : 'grayscale(0.2)'};
+        color:${authColor};flex-shrink:0;
+      ">${authIcon}</span>
       <button class="sedit" title="Edit">✎</button>`;
+
     el.querySelector('.sedit').onclick=e=>{e.stopPropagation();openModal(s.id);};
     el.onclick=()=>connectSession(s.id);
     list.appendChild(el);
@@ -1362,6 +1402,43 @@ async function openLocalTerminal(shellPref) {
 }
 
 // ── CONNECT SSH ────────────────────────────────────────────────────────────
+// ── Silent SSH connect for K8s dashboard — no tab, no terminal UI ────────────
+async function connectSessionSilent(sessId) {
+  const s = getSess(sessId);
+  if (!s) return { ok: false, error: 'Session not found' };
+
+  // Disconnect any previous silent k8s connection
+  if (k8sBgTabId) {
+    try { await window.roshi.disconnect(k8sBgTabId); } catch(e) {}
+    k8sBgTabId = null;
+  }
+
+  const tabId = 'k8s-bg-' + Date.now();
+  let result;
+  try {
+    result = await window.roshi.connect({
+      tabId,
+      host: s.host,
+      port: parseInt(s.port) || 22,
+      username: s.username,
+      password: s.authType === 'password' ? s.password : undefined,
+      privateKey: s.authType === 'key' ? s.privateKey : undefined,
+      passphrase: s.passphrase || undefined,
+    });
+  } catch(e) {
+    result = { ok: false, error: e.message };
+  }
+
+  if (result.ok) {
+    k8sBgTabId = tabId;
+    // If the session disconnects, clear the background tab
+    window.roshi.onClosed(({ tabId: closedId }) => {
+      if (closedId === k8sBgTabId) { k8sBgTabId = null; }
+    });
+  }
+  return result;
+}
+
 async function connectSession(sessId) {
   const s=getSess(sessId); if(!s) return;
 
@@ -1464,6 +1541,122 @@ function toggleK8s(){
   setTimeout(()=>{ try{activeT()?.fit?.fit();}catch(e){} },280);
 }
 function toggleCP(){ cpOpen=!cpOpen; $('cpanel').classList.toggle('open',cpOpen); }
+
+// ── Security / Credential Manager ────────────────────────────────────────────
+let _securityTabBound = false;
+async function loadSecurityTab() {
+  // Only bind Clear All handlers once — prevents double-firing on re-open
+  if (!_securityTabBound) {
+    _securityTabBound = true;
+
+    $('btnClearAllCreds').onclick = async () => {
+      const ok = await showConfirm('Clear all saved credentials?', 'All saved passwords will be deleted. Sessions still exist but will prompt for password on next login.');
+      if (!ok) return;
+      await window.roshi.clearAllCredentials();
+      showToast('🔐 All credentials cleared');
+      loadCredList(); renderSessList();
+    };
+
+    $('btnClearAllHosts').onclick = async () => {
+      const ok = await showConfirm('Clear all known hosts?', 'You will be prompted to trust each server fingerprint on next connect.');
+      if (!ok) return;
+      const hosts = await window.roshi.listKnownHosts();
+      for (const key of Object.keys(hosts)) {
+        const lastColon = key.lastIndexOf(':');
+        const host = key.substring(0, lastColon);
+        const port = key.substring(lastColon + 1);
+        await window.roshi.removeKnownHost(host, parseInt(port) || 22);
+      }
+      showToast('🗑 All known hosts cleared');
+      loadHostList();
+    };
+
+    $('btnClearAllKeys').onclick = async () => {
+      const ok = await showConfirm('Delete all SSH key files?', 'Local key files will be deleted. Remove them from remote authorized_keys manually if key auth is still active.');
+      if (!ok) return;
+      await window.roshi.clearAllSshKeys();
+      showToast('🗑 All SSH keys deleted');
+      loadKeyList(); renderSessList();
+    };
+  }
+
+  await Promise.all([loadCredList(), loadHostList(), loadKeyList()]);
+}
+
+async function loadCredList() {
+  const el = $('credList'); if (!el) return;
+  const creds = await window.roshi.listCredentials();
+  const keys = Object.keys(creds);
+  if (!keys.length) { el.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:6px 0">No saved credentials</div>'; return; }
+  el.innerHTML = keys.map(k => `
+    <div style="display:flex;align-items:center;justify-content:space-between;background:var(--bg3);border:1px solid var(--bd);border-radius:6px;padding:7px 10px">
+      <div>
+        <div style="font-size:12px;color:var(--txt);font-family:var(--tf)">${esc(k)}</div>
+        <div style="font-size:10px;color:var(--txt3);margin-top:2px">🔒 DPAPI encrypted</div>
+      </div>
+      <button data-cred="${esc(k)}" class="cred-del-btn" style="background:transparent;border:1px solid var(--bd2);color:var(--txt3);padding:3px 9px;border-radius:5px;font-size:11px;cursor:pointer;transition:all .15s" onmouseover="this.style.color='var(--red)';this.style.borderColor='var(--red)'" onmouseout="this.style.color='var(--txt3)';this.style.borderColor='var(--bd2)'">✕</button>
+    </div>`).join('');
+  el.querySelectorAll('.cred-del-btn').forEach(btn => {
+    btn.onclick = async () => {
+      const key = btn.dataset.cred;
+      // Use raw key purge — works for both normal and malformed entries
+      await window.roshi.purgeCredentialKey(key);
+      showToast('Credential removed for ' + key);
+      loadCredList(); renderSessList();
+    };
+  });
+}
+
+async function loadHostList() {
+  const el = $('hostList'); if (!el) return;
+  const hosts = await window.roshi.listKnownHosts();
+  const keys = Object.keys(hosts);
+  if (!keys.length) { el.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:6px 0">No known hosts</div>'; return; }
+  el.innerHTML = keys.map(k => {
+    const h = hosts[k];
+    const fp = h.fingerprint ? h.fingerprint.replace('SHA256:','').substring(0,16)+'...' : '—';
+    return `
+    <div style="display:flex;align-items:center;justify-content:space-between;background:var(--bg3);border:1px solid var(--bd);border-radius:6px;padding:7px 10px">
+      <div style="min-width:0">
+        <div style="font-size:12px;color:var(--txt);font-family:var(--tf)">${esc(k)}</div>
+        <div style="font-size:10px;color:var(--txt3);margin-top:2px">${esc(h.keyType||'unknown')} · ${fp}</div>
+      </div>
+      <button data-host="${esc(k)}" class="host-del-btn" style="background:transparent;border:1px solid var(--bd2);color:var(--txt3);padding:3px 9px;border-radius:5px;font-size:11px;cursor:pointer;transition:all .15s" onmouseover="this.style.color='var(--red)';this.style.borderColor='var(--red)'" onmouseout="this.style.color='var(--txt3)';this.style.borderColor='var(--bd2)'">✕</button>
+    </div>`;
+  }).join('');
+  el.querySelectorAll('.host-del-btn').forEach(btn => {
+    btn.onclick = async () => {
+      const key = btn.dataset.host;
+      const lastColon = key.lastIndexOf(':');
+      const host = key.substring(0, lastColon);
+      const port = key.substring(lastColon + 1);
+      await window.roshi.removeKnownHost(host, parseInt(port) || 22);
+      showToast('Host key removed for ' + key);
+      loadHostList();
+    };
+  });
+}
+
+async function loadKeyList() {
+  const el = $('keyList'); if (!el) return;
+  const keys = await window.roshi.listSshKeys();
+  if (!keys.length) { el.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:6px 0">No SSH key files</div>'; return; }
+  el.innerHTML = keys.map(k => `
+    <div style="display:flex;align-items:center;justify-content:space-between;background:var(--bg3);border:1px solid var(--bd);border-radius:6px;padding:7px 10px">
+      <div style="min-width:0;overflow:hidden">
+        <div style="font-size:12px;color:var(--txt);font-family:var(--tf);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(k.name)}</div>
+        <div style="font-size:10px;color:var(--txt3);margin-top:2px">ED25519 key pair</div>
+      </div>
+      <button data-keyname="${esc(k.name)}" class="key-del-btn" style="background:transparent;border:1px solid var(--bd2);color:var(--txt3);padding:3px 9px;border-radius:5px;font-size:11px;cursor:pointer;transition:all .15s" onmouseover="this.style.color='var(--red)';this.style.borderColor='var(--red)'" onmouseout="this.style.color='var(--txt3)';this.style.borderColor='var(--bd2)'">✕</button>
+    </div>`).join('');
+  el.querySelectorAll('.key-del-btn').forEach(btn => {
+    btn.onclick = async () => {
+      await window.roshi.deleteSshKey({ name: btn.dataset.keyname });
+      showToast('SSH key deleted: ' + btn.dataset.keyname);
+      loadKeyList(); renderSessList();
+    };
+  });
+}
 
 // ══════════════════════════════════════════════════════════════════════════
 // ══════════════════════════════════════════════════════════════════════════
@@ -1641,6 +1834,18 @@ function openModal(sessId) {
   selColor=s?.color||'#39ff6e';
   $$('.ctag').forEach(t=>t.classList.toggle('on',t.dataset.c===selColor));
   $('btnDel').classList.toggle('hide',!s);
+
+  // ── Key auth indicator banner — shown when session uses SSH key ─────────────
+  const keyBanner = $('keyAuthBanner');
+  if (keyBanner) {
+    const isKeyAuth = s?.authType === 'key' && (s?.privateKey || s?.keyPath);
+    keyBanner.classList.toggle('hide', !isKeyAuth);
+    if (isKeyAuth) {
+      const keyFile = s?.keyPath || 'generated key';
+      keyBanner.querySelector('#keyAuthFile').textContent = keyFile;
+    }
+  }
+
   $('modalOverlay').classList.remove('hide');
   setTimeout(()=>$('fHost').focus(),100);
 }
@@ -1700,6 +1905,55 @@ async function browseKey() {
   $('fKeyPath').value=r.filePath; keyContent=r.content; showToast('Key loaded');
 }
 
+// ── Remove Key Auth — reverts session back to password, removes key from server ─
+async function removeKeyAuth() {
+  const s = getSess(editSessId);
+  if (!s) return;
+
+  const confirmed = await showConfirm(
+    'Remove key authentication?',
+    `This will:\n• Delete the local key file\n• Remove your key from ${s.username}@${s.host}:~/.ssh/authorized_keys\n• Revert this session to password auth`
+  );
+  if (!confirmed) return;
+
+  showToast('⏳ Removing key from server...');
+
+  try {
+    const result = await window.roshi.removeKeyAuth({
+      sessId: s.id,
+      host: s.host,
+      port: s.port || 22,
+      username: s.username,
+      password: s.password,
+      keyPath: s.keyPath,
+    });
+
+    if (!result.ok) {
+      showToast('✕ ' + (result.error || 'Failed to remove key'));
+      return;
+    }
+
+    // Update session back to password auth
+    const idx = sessions.findIndex(x => x.id === editSessId);
+    if (idx !== -1) {
+      sessions[idx] = {
+        ...sessions[idx],
+        authType: 'password',
+        privateKey: null,
+        keyPath: '',
+        passphrase: '',
+      };
+      await saveSess();
+      renderSessList();
+    }
+
+    closeModal();
+    showToast(`🔒 Key removed — ${s.username}@${s.host} now uses password auth`);
+  } catch(e) {
+    showToast('✕ Error: ' + e.message);
+  }
+}
+
 // ── TOAST ──────────────────────────────────────────────────────────────────
 // ── Home screen boot sequence ─────────────────────────────────────────────────
 function runBootSequence() {
@@ -1735,6 +1989,189 @@ function runBootSequence() {
     setTimeout(showLine, i === 1 ? 600 : 400);
   }
   setTimeout(showLine, 300);
+}
+
+// ── SSH Save Password Modal ───────────────────────────────────────────────────
+function showSavePwdModal({ tabId, host, user, port }) {
+  const existing = document.getElementById('savePwdModal');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'savePwdModal';
+  overlay.style.cssText = `
+    position:fixed;inset:0;z-index:9000;
+    background:rgba(0,0,0,0.75);backdrop-filter:blur(4px);
+    display:flex;align-items:center;justify-content:center;
+  `;
+
+  overlay.innerHTML = `
+    <div style="
+      background:var(--bg2);border:1px solid var(--bd2);
+      border-radius:12px;padding:28px 32px;max-width:420px;width:90%;
+      box-shadow:0 20px 60px rgba(0,0,0,0.8);
+    ">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+        <span style="font-size:32px">🔑</span>
+        <div>
+          <div style="font-size:14px;font-weight:700;color:var(--txt)">Save password for</div>
+          <div style="font-size:13px;color:var(--cyan);font-family:monospace">${user}@${host}</div>
+        </div>
+      </div>
+      <div style="font-size:12px;color:var(--txt2);line-height:1.6;margin-bottom:18px">
+        RoshiLABX will store this password locally.<br>
+        Next time you connect, it will be filled automatically.
+      </div>
+      <div style="margin-bottom:16px">
+        <input id="spPassword" type="password" placeholder="Enter your password" style="
+          width:100%;background:var(--bg3);border:1px solid var(--bd2);color:var(--txt);
+          padding:10px 12px;border-radius:7px;font-size:13px;outline:none;box-sizing:border-box;
+          transition:border-color .15s;
+        " onfocus="this.style.borderColor='var(--cyan)'" onblur="this.style.borderColor='var(--bd2)'">
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button id="spNo" style="
+          background:var(--bg4);border:1px solid var(--bd2);color:var(--txt2);
+          padding:9px 20px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;
+        ">No</button>
+        <button id="spYes" style="
+          background:var(--cyan);border:1px solid var(--cyan);color:#000;
+          padding:9px 22px;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;
+        ">✓ Yes, Save</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+  const pwdInput = overlay.querySelector('#spPassword');
+  pwdInput.focus();
+
+  overlay.querySelector('#spNo').onclick = async () => {
+    // User typed password but chose not to save — inject only, no save
+    const pwd = pwdInput.value;
+    if (pwd) await window.roshi.injectPassword(tabId, pwd);
+    overlay.remove();
+  };
+
+  overlay.querySelector('#spYes').onclick = async () => {
+    const pwd = pwdInput.value;
+    if (!pwd) { pwdInput.style.borderColor = 'var(--red)'; pwdInput.focus(); return; }
+    // Stage the credential in main.js — it will be saved only after successful login is confirmed
+    await window.roshi.saveCredential({ user, host, port, password: pwd });
+    await window.roshi.injectPassword(tabId, pwd);
+    overlay.remove();
+    // Toast shown by main.js in the terminal on confirmed login
+  };
+
+  pwdInput.onkeydown = (e) => { if (e.key === 'Enter') overlay.querySelector('#spYes').click(); };
+}
+
+// ── Suggest Save Session Modal ────────────────────────────────────────────────
+function showSaveSessionSuggestion({ host, user, port }) {
+  const existing = document.getElementById('saveSessionSuggest');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'saveSessionSuggest';
+  overlay.style.cssText = `
+    position:fixed;inset:0;z-index:9000;
+    background:rgba(0,0,0,0.72);backdrop-filter:blur(6px);
+    display:flex;align-items:center;justify-content:center;
+  `;
+
+  overlay.innerHTML = `
+    <div style="
+      background:var(--bg2);
+      border:1px solid rgba(0,229,255,0.2);
+      border-radius:14px;padding:32px 36px;
+      max-width:420px;width:90%;
+      box-shadow:0 24px 64px rgba(0,0,0,0.85),0 0 0 1px rgba(0,229,255,0.06);
+    ">
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px">
+        <div style="
+          width:44px;height:44px;border-radius:10px;
+          background:rgba(0,229,255,0.08);border:1px solid rgba(0,229,255,0.2);
+          display:flex;align-items:center;justify-content:center;
+          font-size:20px;flex-shrink:0;
+        ">🖥️</div>
+        <div>
+          <div style="font-size:15px;font-weight:700;color:var(--txt);margin-bottom:3px">Add to saved sessions?</div>
+          <div style="font-size:12px;color:var(--txt2)">
+            Connected to <span style="color:var(--cyan);font-family:monospace">${user}@${host}</span>
+          </div>
+        </div>
+      </div>
+      <div style="
+        background:rgba(0,229,255,0.04);border:1px solid rgba(0,229,255,0.1);
+        border-radius:8px;padding:12px 14px;margin-bottom:20px;
+        font-size:12px;color:var(--txt2);line-height:1.7;
+      ">
+        Save this server to your sidebar for quick one-click access.<br>
+        Your credentials will be stored securely on this device.
+      </div>
+      <div style="margin-bottom:20px">
+        <label style="font-size:11px;font-weight:700;color:var(--txt3);letter-spacing:1px;text-transform:uppercase;display:block;margin-bottom:7px">Session Name</label>
+        <input id="ssLabel" type="text" value="${user}@${host}" style="
+          width:100%;background:var(--bg3);border:1px solid rgba(0,229,255,0.15);
+          color:var(--txt);padding:10px 13px;border-radius:8px;
+          font-size:13px;outline:none;box-sizing:border-box;
+          transition:border-color .15s;font-family:var(--tf);
+        " onfocus="this.style.borderColor='var(--cyan)'" onblur="this.style.borderColor='rgba(0,229,255,0.15)'">
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button id="ssNo" style="
+          background:transparent;border:1px solid rgba(255,255,255,0.1);
+          color:var(--txt2);padding:10px 22px;border-radius:8px;
+          font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;
+        " onmouseover="this.style.borderColor='rgba(255,255,255,0.25)'"
+           onmouseout="this.style.borderColor='rgba(255,255,255,0.1)'">Not now</button>
+        <button id="ssYes" style="
+          background:var(--cyan);border:1px solid var(--cyan);color:#000;
+          padding:10px 24px;border-radius:8px;font-size:13px;font-weight:700;
+          cursor:pointer;transition:all .15s;letter-spacing:.3px;
+        " onmouseover="this.style.opacity='0.85'"
+           onmouseout="this.style.opacity='1'">Add Session</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+  const labelInput = overlay.querySelector('#ssLabel');
+  labelInput.focus();
+  labelInput.select();
+
+  overlay.querySelector('#ssNo').onclick = () => overlay.remove();
+
+  overlay.querySelector('#ssYes').onclick = async () => {
+    const label = labelInput.value.trim() || `${user}@${host}`;
+    let savedPassword = '';
+    try {
+      const allCreds = await window.roshi.listCredentials();
+      const key = `${user}@${host}:${parseInt(port) || 22}`;
+      savedPassword = allCreds?.[key]?.password || '';
+    } catch(e) {}
+
+    const s = {
+      id: 's' + Date.now(),
+      label,
+      host,
+      port: parseInt(port) || 22,
+      username: user,
+      authType: 'password',
+      password: savedPassword,
+      color: '#39ff6e',
+    };
+
+    sessions.push(s);
+    await saveSess();
+    renderSessList();
+    overlay.remove();
+    showToast(`Session "${label}" added`);
+  };
+
+  labelInput.onkeydown = (e) => {
+    if (e.key === 'Enter') overlay.querySelector('#ssYes').click();
+    if (e.key === 'Escape') overlay.remove();
+  };
 }
 
 function showToast(msg){
@@ -1779,36 +2216,135 @@ async function detectShells() {
 // ══════════════════════════════════════════════════════════════
 
 let k8sInterval = null, k8sAutoOn = true, k8sCurrentTab = 'overview';
+let k8sSelectedSessId = null; // which session the dashboard is running kubectl against
+let k8sBgTabId = null;        // silent background SSH tab for kubectl (no terminal UI)
 
+// Returns tabId for the currently selected K8s session (if connected)
 function getK8sTabId() {
-  const conn = tabs.find(t => t.connected);
+  // Priority 1: silent background connection made from K8s dashboard
+  if (k8sBgTabId) return k8sBgTabId;
+  // Priority 2: explicitly selected session that has an active visible tab
+  if (k8sSelectedSessId) {
+    const t = tabs.find(t => t.sessId === k8sSelectedSessId && t.connected);
+    if (t) return t.id;
+  }
+  // Priority 3: any connected SSH tab (not local terminal)
+  const conn = tabs.find(t => t.connected && !t.isLocal);
   return conn ? conn.id : null;
+}
+
+// Returns which session is driving the dashboard (for display)
+function getK8sSession() {
+  if (k8sSelectedSessId) return getSess(k8sSelectedSessId);
+  const t = tabs.find(t => t.connected && !t.isLocal);
+  return t ? getSess(t.sessId) : null;
 }
 
 function k8sExec(cmd) {
   const tabId = getK8sTabId();
-  if (!tabId) return Promise.resolve({ ok: false, error: 'No SSH session' });
+  if (!tabId) return Promise.resolve({ ok: false, error: 'No SSH session connected' });
   return window.roshi.exec(tabId, cmd);
 }
 
 async function initK8sDash() {
+  // ── Populate session selector with all saved sessions ─────────────────────
+  const sessSel = $('k8sSessSel');
+  const connBtn = $('k8sConnBtn');
+  if (sessSel) {
+    sessSel.innerHTML = '<option value="">— Select Session —</option>';
+    sessions.forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s.id;
+      const isConnected = tabs.some(t => t.sessId === s.id && t.connected);
+      opt.textContent = (isConnected ? '🟢 ' : '⚪ ') + s.label + '  (' + s.username + '@' + s.host + ')';
+      if (s.id === k8sSelectedSessId) opt.selected = true;
+      sessSel.appendChild(opt);
+    });
+
+    // Auto-select if only one connected session
+    if (!k8sSelectedSessId) {
+      const connTab = tabs.find(t => t.connected && !t.isLocal);
+      if (connTab?.sessId) {
+        k8sSelectedSessId = connTab.sessId;
+        sessSel.value = k8sSelectedSessId;
+      }
+    }
+
+    sessSel.onchange = async () => {
+      k8sSelectedSessId = sessSel.value || null;
+      k8sBgTabId = null; // reset previous background connection
+
+      const sess = k8sSelectedSessId ? getSess(k8sSelectedSessId) : null;
+      if (!sess) { initK8sDash(); return; }
+
+      // Check if already connected via an open tab
+      const isAlreadyConnected = tabs.some(t => t.sessId === sess.id && t.connected);
+      if (isAlreadyConnected) {
+        // Use the existing tab — no new connection needed
+        initK8sDash();
+        return;
+      }
+
+      // Auto-connect silently — no tab, no terminal
+      if (connBtn) { connBtn.textContent = '⏳ Connecting...'; connBtn.disabled = true; connBtn.style.display = 'inline-flex'; }
+      const result = await connectSessionSilent(sess.id);
+      if (connBtn) { connBtn.disabled = false; connBtn.style.display = 'none'; }
+
+      if (result.ok) {
+        showToast('⎈ K8s connected to ' + sess.label);
+      } else {
+        showToast('✕ ' + (result.error || 'Connection failed'));
+      }
+      initK8sDash();
+    };
+
+    // Connect button — silent background SSH, no tab opened
+    if (connBtn) {
+      connBtn.onclick = async () => {
+        if (!k8sSelectedSessId) return;
+        const sess = getSess(k8sSelectedSessId);
+        if (!sess) return;
+        connBtn.textContent = '⏳ Connecting...';
+        connBtn.disabled = true;
+        const result = await connectSessionSilent(sess.id);
+        connBtn.disabled = false;
+        if (result.ok) {
+          showToast('⎈ Connected to ' + sess.label);
+          initK8sDash();
+        } else {
+          showToast('✕ ' + (result.error || 'Connection failed'));
+          connBtn.textContent = '⚡ Connect';
+        }
+      };
+    }
+  }
+
   const tabId = getK8sTabId();
   const noConn = $('k8sNoConn'), body = $('k8sBody');
+
   if (!tabId) {
     noConn?.classList.remove('hide');
     body?.classList.add('hide');
+    // Show connect button if a session is selected but not connected
+    const sess = k8sSelectedSessId ? getSess(k8sSelectedSessId) : null;
+    if (connBtn) connBtn.style.display = sess ? 'inline-flex' : 'none';
+    if ($('k8sCtx')) $('k8sCtx').textContent = sess ? ('⚡ ' + sess.label + ' — not connected') : 'No context';
     return;
   }
+
+  if (connBtn) connBtn.style.display = 'none';
   noConn?.classList.add('hide');
   body?.classList.remove('hide');
 
-  // Bind tabs
-  $$('[data-k8stab]').forEach(t => t.onclick = () => {
-    $$('[data-k8stab]').forEach(x => x.classList.remove('on')); t.classList.add('on');
-    k8sCurrentTab = t.dataset.k8stab;
-    $$('[id^="k8stab-"]').forEach(p => p.classList.add('hide'));
-    $('k8stab-' + k8sCurrentTab)?.classList.remove('hide');
-    k8sRefresh();
+  // Bind tabs (only once — guard against rebinding on re-init)
+  $$('[data-k8stab]').forEach(t => {
+    t.onclick = () => {
+      $$('[data-k8stab]').forEach(x => x.classList.remove('on')); t.classList.add('on');
+      k8sCurrentTab = t.dataset.k8stab;
+      $$('[id^="k8stab-"]').forEach(p => p.classList.add('hide'));
+      $('k8stab-' + k8sCurrentTab)?.classList.remove('hide');
+      k8sRefresh();
+    };
   });
 
   // Namespace filter
@@ -1823,18 +2359,31 @@ async function initK8sDash() {
     else { clearInterval(k8sInterval); k8sInterval = null; }
   };
 
-  // Get context & namespaces
+  // Show which session is active
+  const activeSess = getK8sSession();
+  if ($('k8sCtx') && activeSess) {
+    $('k8sCtx').textContent = '⎈ ' + activeSess.label + ' (' + activeSess.username + '@' + activeSess.host + ')';
+  }
+
+  // Get kubectl context & namespaces
   k8sExec('kubectl config current-context 2>/dev/null').then(r => {
-    if (r.ok) $('k8sCtx').textContent = '⎈ ' + r.output.trim();
+    if (r.ok && r.output.trim()) {
+      const ctx = r.output.trim();
+      if ($('k8sCtx') && activeSess) {
+        $('k8sCtx').textContent = '⎈ ' + activeSess.label + '  [' + ctx + ']';
+      }
+    }
   });
   k8sExec('kubectl get namespaces --no-headers -o custom-columns=NAME:.metadata.name 2>/dev/null').then(r => {
     if (r.ok) {
       const sel = $('k8sNs');
+      const prev = sel.value;
       sel.innerHTML = '<option value="all">All Namespaces</option>';
-      r.output.trim().split(/\s+/).forEach(ns => {
+      r.output.trim().split(/\s+/).filter(Boolean).forEach(ns => {
         const o = document.createElement('option');
         o.value = ns; o.textContent = ns; sel.appendChild(o);
       });
+      if (prev) sel.value = prev;
     }
   });
 

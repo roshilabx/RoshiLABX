@@ -1,5 +1,34 @@
+# ── Dependencies ──────────────────────────────────────────────────────────────
 node_modules/
+
+# ── Build output ──────────────────────────────────────────────────────────────
 dist/
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
 *.log
+*.old.log
+
+# ── Personal / backup files ───────────────────────────────────────────────────
 bkp-package.json
 .npmrc
+
+# ── SSH keys (safety net — real keys live in %APPDATA%\roshilabx\ssh_keys\) ──
+*.pem
+*.ppk
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+id_ecdsa
+id_ecdsa.pub
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ── Editor ────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
