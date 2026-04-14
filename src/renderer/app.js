@@ -19,7 +19,7 @@ let settings={ theme:'default', fontSize:13, cursorStyle:'block', opacity:100,
                sbWidth:220, sbPad:'compact',
                sbBg:'', sbText:'', sbHover:'', sbBorder:'',
                wallpaper:'none', wpOpacity:20, wpTarget:'terminal', customWpImage:'',
-               winOpacity:100, termTransparent:false };
+               winOpacity:100 };
 let editSessId=null, keyContent=null, selColor='#39ff6e', selAuth='password';
 const LOCAL_PREFIX = 'local-'; // prefix for local terminal tab IDs
 let k8sOpen=false, cpOpen=false, toastTmr, fontToastTmr;
@@ -46,12 +46,11 @@ async function boot() {
     sbTheme:'dark', sbAccent:'#00e5ff', sbFontFam:'inherit', sbFontSize:13,
     sbWidth:220, sbPad:'compact', sbBg:'', sbText:'', sbHover:'', sbBorder:'',
     wallpaper:'none', wpOpacity:20, wpTarget:'terminal', customWpImage:'',
-    winOpacity:100, termTransparent:false }, settings);
+    winOpacity:100 }, settings);
 
   applyTheme(settings.theme, false);
   $('fval').textContent = settings.fontSize + 'px';
-  $('opSlider').value = settings.opacity;
-  $('opVal').textContent = settings.opacity + '%';
+  if ($('opSlider')) { $('opSlider').value = settings.opacity; $('opVal').textContent = settings.opacity + '%'; }
   if (settings.fontFamily) $('fontFam').value = settings.fontFamily;
   if (settings.sidebarHidden) setSidebar(true, false);
   applySidebarTheme(settings.sbTheme, false);
@@ -59,13 +58,10 @@ async function boot() {
   restoreCpanelUI();
   if (settings.customWpImage) applyWallpaper('image', false);
   else if (settings.wallpaper && settings.wallpaper !== 'none') applyWallpaper(settings.wallpaper, false);
-  // Apply saved window opacity
   if (settings.winOpacity && settings.winOpacity < 100) {
     window.roshi.setWinOpacity(settings.winOpacity / 100);
   }
   if ($('winOpSlider')) { $('winOpSlider').value = settings.winOpacity || 100; $('winOpVal').textContent = (settings.winOpacity || 100) + '%'; }
-  // Apply saved terminal transparency state
-  setTimeout(() => applyTermTransparency(settings.termTransparent || false, false), 0);
 
   renderSessList();
   showView('home');
@@ -328,17 +324,14 @@ function bindAll() {
   $('fminus').onclick = ()=>applyFont(settings.fontSize-1);
   $('fplus').onclick  = ()=>applyFont(settings.fontSize+1);
   $('fontFam').onchange = e=>{ settings.fontFamily=e.target.value; tabs.forEach(t=>{if(t.term) t.term.options.fontFamily=settings.fontFamily;}); saveCfg(); };
-  $('opSlider').oninput = e=>{
-    settings.opacity=+e.target.value;
-    $('opVal').textContent=settings.opacity+'%';
-    if (settings.termTransparent) {
-      const darkness = (100 - settings.opacity) / 100;
-      $('term-wrap').style.setProperty('--term-overlay', `rgba(0,0,0,${darkness.toFixed(2)})`);
-    } else {
+  if ($('opSlider')) {
+    $('opSlider').oninput = e=>{
+      settings.opacity=+e.target.value;
+      if ($('opVal')) $('opVal').textContent=settings.opacity+'%';
       $('term-wrap').style.opacity = settings.opacity / 100;
-    }
-    saveCfg();
-  };
+      saveCfg();
+    };
+  }
   // Window-level transparency (desktop shows through)
   if ($('winOpSlider')) {
     $('winOpSlider').oninput = e => {
@@ -349,9 +342,7 @@ function bindAll() {
     };
   }
   // Terminal transparency toggle
-  if ($('btnTermTransp')) {
-    $('btnTermTransp').onclick = () => applyTermTransparency(!settings.termTransparent, true);
-  }
+
   $('lineHeightSlider').oninput = e=>{ settings.lineHeight=+e.target.value; $('lineHeightVal').textContent=e.target.value; tabs.forEach(t=>{if(t.term) t.term.options.lineHeight=settings.lineHeight;}); saveCfg(); };
   $('letterSpacingSlider').oninput = e=>{ settings.letterSpacing=+e.target.value; $('letterSpacingVal').textContent=e.target.value+'px'; tabs.forEach(t=>{if(t.term) t.term.options.letterSpacing=settings.letterSpacing;}); saveCfg(); };
   $('scrollbackSlider').oninput = e=>{ settings.scrollback=+e.target.value; $('scrollbackVal').textContent=e.target.value>=1000?(e.target.value/1000).toFixed(0)+'k':e.target.value; saveCfg(); };
@@ -443,10 +434,9 @@ function bindAll() {
   }, { passive:false });
 
   // Monitor buttons
-  $('monStartBtn').onclick   = startMonitor;
-  $('monStopBtn').onclick    = stopMonitor;
-  $('monModeLocal').onclick  = ()=>setMonMode('local');
-  $('monModeRemote').onclick = ()=>setMonMode('remote');
+  // Monitor buttons
+  $('monStartBtn').onclick = startMonitor;
+  $('monStopBtn').onclick  = stopMonitor;
 
   // Modal
   $('mClose').onclick       = closeModal;
@@ -1125,7 +1115,7 @@ function showView(id) {
   if (id==='mon') {
     updateMonitorView();
     // Auto-start local monitor if not already running
-    if (!monRunning && monMode === 'local') startMonitor();
+    if (!monRunning) startMonitor();
   }
   if (id==='k8s') { /* handled by initK8sDash */ }
 }
@@ -1670,41 +1660,20 @@ async function loadKeyList() {
 // ── SYSTEM MONITOR (Windows Local + SSH Remote) ───────────────────────────
 // ══════════════════════════════════════════════════════════════════════════
 
-let monMode = 'local'; // 'local' or 'remote'
+// ── SYSTEM MONITOR (Local) ─────────────────────────────────────────────────
 
 function updateMonitorView() {
-  const hasRemote = tabs.some(t=>t.connected);
-  // Mode buttons
-  $('monModeLocal').classList.toggle('on', monMode==='local');
-  $('monModeRemote').classList.toggle('on', monMode==='remote');
-  // Show warning if remote selected but no session
-  $('monNoSess').classList.toggle('hide', !(monMode==='remote' && !hasRemote));
   $('monBody').classList.toggle('hide', !monRunning);
 }
 
-function setMonMode(mode) {
-  if (monRunning) stopMonitor();
-  monMode = mode;
-  updateMonitorView();
-}
-
 async function startMonitor() {
-  if (monMode === 'remote') {
-    const connected = tabs.find(t=>t.connected);
-    if (!connected) { showToast('Connect to an SSH session first'); return; }
-    monTabId = connected.id;
-    const s = getSess(connected.sessId);
-    $('monHost').textContent = s ? `🖥 ${s.username}@${s.host}` : '🖥 Remote';
-  } else {
-    monTabId = null;
-    $('monHost').textContent = '🖥 This Computer';
-  }
+  monTabId = null;
+  $('monHost').textContent = '🖥 This Computer';
   monRunning = true;
   $('monStartBtn').classList.add('hide');
   $('monStopBtn').classList.remove('hide');
   $('monDot').className = 'mon-dot live';
   $('monStatusTxt').textContent = 'Live';
-  $('monNoSess').classList.add('hide');
   $('monBody').classList.remove('hide');
   await fetchStats();
   monInterval = setInterval(fetchStats, 4000);
@@ -1723,13 +1692,7 @@ function stopMonitor() {
 
 async function fetchStats() {
   try {
-    let data;
-    if (monMode === 'local') {
-      data = await window.roshi.monitorLocal();
-    } else {
-      if (!monTabId || !getTab(monTabId)?.connected) { stopMonitor(); return; }
-      data = await fetchRemoteStats(monTabId);
-    }
+    const data = await window.roshi.monitorLocal();
     if (!data?.ok) { showToast('Monitor error: '+(data?.error||'unknown')); return; }
     renderStats(data);
   } catch(e) {
@@ -1738,40 +1701,7 @@ async function fetchStats() {
   }
 }
 
-// Fetch stats from remote SSH Linux server
-async function fetchRemoteStats(tabId) {
-  const exec = cmd => window.roshi.exec(tabId, cmd);
-  try {
-    const [cpuOut, memOut, diskOut, uptimeOut, procOut, netOut, osOut] = await Promise.all([
-      exec(`awk '/^cpu / {idle=$5; total=0; for(i=2;i<=NF;i++) total+=$i; printf "%.1f", (1-idle/total)*100}' /proc/stat`),
-      exec(`free -m | awk '/^Mem:/{printf "%d %d %d", $2, $3, $4}'`),
-      exec(`df -h / | awk 'NR==2{printf "%s %s %s %s", $2,$3,$4,$5}'`),
-      exec(`uptime -p 2>/dev/null || uptime`),
-      exec(`ps aux --sort=-%cpu | awk 'NR>1 && NR<=9 {printf "%s|%s|%s|%s|%s\n",$11,$2,$3,$4,$1}'`),
-      exec(`cat /proc/net/dev | awk 'NR>2 && $1!="lo:" {gsub(":",""); printf "%s|%s|%s\n",$1,$2,$10}'`),
-      exec(`cat /etc/os-release 2>/dev/null | grep PRETTY_NAME | cut -d'"' -f2 || uname -sr`),
-    ]);
-    const [mTotal,mUsed,mFree] = (memOut.output||'').split(' ').map(Number);
-    const dParts = (diskOut.output||'').split(' ');
-    const procs = (procOut.output||'').split('\n').filter(Boolean).map(l=>{
-      const [name,pid,cpu,mem,user]=l.split('|');
-      return {name:(name||'').split('/').pop().substring(0,28),pid:pid?.trim(),cpu:parseFloat(cpu)||0,mem:parseFloat(mem)||0,user:user?.trim()};
-    });
-    const nets = (netOut.output||'').split('\n').filter(Boolean).map(l=>{
-      const [name,rx,tx]=l.split('|'); return {name:name?.trim(),rx:parseInt(rx)||0,tx:parseInt(tx)||0};
-    });
-    return {
-      ok:true, platform:'linux',
-      cpu:{pct:parseFloat(cpuOut.output)||0},
-      mem:{usedMB:mUsed,totalMB:mTotal,pct:mTotal?Math.round((mUsed/mTotal)*100):0,freeMB:mFree},
-      disk:{pct:parseInt(dParts[3])||0,usedGB:dParts[1],freeGB:dParts[2],totalGB:dParts[0]},
-      uptime:(uptimeOut.output||'').trim().replace('up ','').split(',').slice(0,2).join(',').trim(),
-      os:(osOut.output||'').trim(), gpu:'N/A', procs, nets,
-    };
-  } catch(e) { return {ok:false,error:e.message}; }
-}
 
-// Render stats data (works for both Windows and Linux)
 function renderStats(d) {
   const fmtBytes = b=>{ const n=parseInt(b)||0; if(n>=1e9) return (n/1e9).toFixed(1)+' GB'; if(n>=1e6) return (n/1e6).toFixed(1)+' MB'; if(n>=1e3) return (n/1e3).toFixed(0)+' KB'; return n+' B'; };
 
@@ -2790,27 +2720,5 @@ function showConfirm(title, subtitle) {
   });
 }
 
-// ── Terminal Transparency Toggle ─────────────────────────────────────────────
-function applyTermTransparency(enabled, save) {
-  settings.termTransparent = enabled;
-  const termWrap = $('term-wrap');
-  const btn = $('btnTermTransp');
-
-  if (enabled) {
-    // Transparent: desktop shows through terminal area
-    document.body.classList.add('term-transparent');
-    tabs.forEach(t => { if (t.term) t.term.options.theme = {...xtermTheme(), background:'transparent'}; });
-    const darkness = (100 - (settings.opacity || 100)) / 100;
-    if (termWrap) termWrap.style.setProperty('--term-overlay', `rgba(0,0,0,${darkness.toFixed(2)})`);
-    if (btn) { btn.textContent = '⬛ Disable'; btn.classList.add('on'); }
-  } else {
-    // Opaque: use theme background
-    document.body.classList.remove('term-transparent');
-    tabs.forEach(t => { if (t.term) t.term.options.theme = xtermTheme(); });
-    if (termWrap) termWrap.style.setProperty('--term-overlay', 'rgba(0,0,0,0)');
-    if (btn) { btn.textContent = '⬜ Enable'; btn.classList.remove('on'); }
-  }
-  if (save) saveCfg();
-}
-
 boot();
+

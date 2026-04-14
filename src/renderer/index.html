@@ -365,10 +365,7 @@ body.term-transparent .xterm-screen canvas{background:transparent!important}
 .mon-btn{background:transparent;border:1px solid var(--bd2);color:var(--txt2);padding:5px 12px;border-radius:5px;font-size:11px;font-weight:700;transition:all .15s}
 .mon-btn:hover{border-color:var(--cyan);color:var(--cyan)}
 .mon-btn.stop:hover{border-color:var(--red);color:var(--red)}
-.mon-no-sess{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px}
-.mon-no-sess .ph-ico{font-size:52px;opacity:.2}
-.mon-no-sess .ph-ttl{font-size:18px;font-weight:800;color:var(--txt2)}
-.mon-no-sess .ph-sub{font-size:13px;color:var(--txt3);text-align:center;max-width:320px}
+
 .mon-body{flex:1;overflow-y:auto;padding:16px 20px;display:grid;grid-template-columns:1fr 1fr;gap:14px}
 .mon-body::-webkit-scrollbar{width:4px}
 .mon-body::-webkit-scrollbar-thumb{background:var(--bd2);border-radius:2px}
@@ -400,10 +397,7 @@ body.term-transparent .xterm-screen canvas{background:transparent!important}
 .mon-uptime{font-size:13px;font-family:var(--tf);color:var(--green);font-weight:700}
 .mon-refresh-info{font-size:10px;color:var(--txt3);text-align:right}
 
-.mon-mode-tabs{display:flex;gap:4px;margin:0 4px}
-.mon-mode-tab{background:var(--bg3);border:1px solid var(--bd2);color:var(--txt2);padding:4px 12px;border-radius:5px;font-size:11px;font-weight:700;transition:all .15s}
-.mon-mode-tab:hover{border-color:var(--cyan);color:var(--cyan)}
-.mon-mode-tab.on{background:var(--cyan);color:#000;border-color:var(--cyan)}
+
 .local-term-group{display:flex;align-items:center;gap:6px}
 .shell-select{background:var(--bg3);border:1px solid var(--bd2);color:var(--txt2);padding:9px 10px;border-radius:7px;font-size:12px;font-weight:600;outline:none;cursor:pointer;transition:all .15s}
 .shell-select:hover,.shell-select:focus{border-color:var(--cyan);color:var(--txt)}
@@ -819,11 +813,7 @@ input[type=color]::-webkit-color-swatch{border:none;border-radius:3px}
         <div class="mon-header">
           <span style="font-size:20px">📊</span>
           <span class="mon-title">System Monitor</span>
-          <span class="mon-host" id="monHost">—</span>
-          <div class="mon-mode-tabs">
-            <button class="mon-mode-tab on" id="monModeLocal">🖥 This PC</button>
-            <button class="mon-mode-tab" id="monModeRemote">🌐 SSH Remote</button>
-          </div>
+          <span class="mon-host" id="monHost">🖥 This Computer</span>
           <div class="mon-status">
             <div class="mon-dot off" id="monDot"></div>
             <span id="monStatusTxt">Stopped</span>
@@ -831,13 +821,6 @@ input[type=color]::-webkit-color-swatch{border:none;border-radius:3px}
           <button class="mon-btn" id="monStartBtn">▶ Start</button>
           <button class="mon-btn stop hide" id="monStopBtn">⏹ Stop</button>
           <span class="mon-refresh-info" id="monRefreshInfo"></span>
-        </div>
-        <!-- No session message (only shown in remote mode with no session) -->
-        <div class="mon-no-sess hide" id="monNoSess">
-          <div class="ph-ico">🌐</div>
-          <div class="ph-ttl">No SSH Session</div>
-          <div class="ph-sub">Connect to an SSH session first to monitor a remote server</div>
-          <button class="btn-p" onclick="openModal(null)">＋ Add Session</button>
         </div>
         <!-- Stats grid -->
         <div class="mon-body hide" id="monBody">
@@ -1194,16 +1177,6 @@ input[type=color]::-webkit-color-swatch{border:none;border-radius:3px}
 
     <div class="cp-stl">Scrollback Lines</div>
     <div class="sl-row"><input type="range" id="scrollbackSlider" min="500" max="50000" step="500" value="10000"><span class="slval" id="scrollbackVal">10k</span></div>
-
-    <div class="cp-stl">Terminal Transparency</div>
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-      <button class="tb-btn" id="btnTermTransp" style="flex:1;padding:7px 10px;font-size:11px;text-align:center">⬜ Enable</button>
-    </div>
-    <div style="font-size:10px;color:var(--txt3);margin-bottom:8px">Desktop shows through terminal area</div>
-
-    <div class="cp-stl">Terminal Opacity</div>
-    <div class="sl-row"><input type="range" id="opSlider" min="10" max="100" value="100"><span class="slval" id="opVal">100%</span></div>
-    <div style="font-size:10px;color:var(--txt3);margin:-4px 0 6px;padding:0 2px">Controls terminal background independently</div>
 
     <div class="cp-stl">Custom Colors</div>
     <div class="color-grid">

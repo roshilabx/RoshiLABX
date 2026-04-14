@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('roshi', {
   localStop:    (tabId)       => ipcRenderer.invoke('localterm:stop', { tabId }),
   localShells:  ()            => ipcRenderer.invoke('localterm:shells'),
   monitorLocal: ()            => ipcRenderer.invoke('monitor:local'),
+  setWinOpacity:(val)         => ipcRenderer.invoke('win:opacity', val),
   // Native clipboard via Electron (works without browser permissions)
   clipboardRead:  ()     => ipcRenderer.invoke('clipboard:read'),
   clipboardWrite: (text) => ipcRenderer.invoke('clipboard:write', text),

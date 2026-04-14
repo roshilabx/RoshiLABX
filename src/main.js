@@ -670,15 +670,21 @@ ipcMain.handle('ssh:exec', (_, { tabId, cmd }) => {
     return { ok: false, error: 'Not connected' };
   }
   return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      logger.warn('SSH', 'exec timeout', { tabId, cmd: cmd.substring(0,60) });
+      resolve({ ok: false, error: 'exec timeout' });
+    }, 8000);
     conn.client.exec(cmd, (err, stream) => {
       if (err) {
+        clearTimeout(timer);
         logger.error('SSH', 'exec failed', { tabId, cmd: cmd.substring(0,60), error: err.message });
         return resolve({ ok: false, error: err.message });
       }
       let out = '';
-      stream.on('data', d => out += d.toString());
-      stream.stderr.on('data', d => out += d.toString());
-      stream.on('close', () => resolve({ ok: true, output: out }));
+      stream.on('data', d => { out += d.toString(); });
+      stream.stderr.on('data', d => { out += d.toString(); });
+      stream.on('close', () => { clearTimeout(timer); resolve({ ok: true, output: out.trim() }); });
+      stream.on('error', e => { clearTimeout(timer); resolve({ ok: false, error: e.message }); });
     });
   });
 });
@@ -704,7 +710,7 @@ ipcMain.handle('monitor:local', async () => {
   try {
     if (isWin) {
       // Write a PS1 script to temp dir — avoids ALL escaping issues
-      const tmpScript = path2.join(os2.tmpdir(), 'roshi_monitor.ps1');
+      const tmpScript = path2.join(DATA_DIR, 'roshi_monitor.ps1');
       const psScript = `
 # CPU
 $cpu = (Get-CimInstance Win32_Processor | Measure-Object -Property LoadPercentage -Average).Average
@@ -759,9 +765,9 @@ try {
 } catch {}
 `;
       fs2.writeFileSync(tmpScript, psScript, 'utf8');
+      if (!fs2.existsSync(tmpScript)) return { ok: false, error: 'Monitor script could not be written' };
       const raw = await run(`powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${tmpScript}"`);
-      // Clean up
-      try { fs2.unlinkSync(tmpScript); } catch {}
+      // Keep persistent — do NOT delete, avoids Defender race condition
 
       // Parse output lines
       const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
@@ -824,7 +830,7 @@ try {
         run(`awk '/^cpu / {idle=$5;tot=0;for(i=2;i<=NF;i++)tot+=$i;printf "%.1f",(1-idle/tot)*100}' /proc/stat`).catch(()=>'0'),
         run(`free -m | awk '/^Mem:/{printf "%d %d %d",$2,$3,$4}'`).catch(()=>'0 0 0'),
         run(`df -h / | awk 'NR==2{printf "%s %s %s %s",$2,$3,$4,$5}'`).catch(()=>'0 0 0 0%'),
-        run(`uptime -p 2>/dev/null || uptime`).catch(()=>'—'),
+        run(`uptime`).catch(()=>'—'),
         run(`ps aux --sort=-%cpu | awk 'NR>1&&NR<=9{printf "%s|%s|%s|%s|%s\\n",$11,$2,$3,$4,$1}'`).catch(()=>''),
         run(`awk 'NR>2&&$1!="lo:"{gsub(":","");printf "%s|%s|%s\\n",$1,$2,$10}' /proc/net/dev`).catch(()=>''),
         run(`grep PRETTY_NAME /etc/os-release 2>/dev/null | cut -d'"' -f2 || uname -sr`).catch(()=>'Linux'),
@@ -836,7 +842,7 @@ try {
         cpu:  { pct: parseFloat(cpuOut)||0 },
         mem:  { usedMB:mU, totalMB:mT, pct:mT?Math.round((mU/mT)*100):0, freeMB:mT-mU },
         disk: { pct:parseInt(dP[3])||0, usedGB:dP[1], freeGB:dP[2], totalGB:dP[0] },
-        uptime: uptimeOut.replace('up ','').split(',').slice(0,2).join(',').trim(),
+        uptime: (() => { const m = uptimeOut.match(/up\s+(.+?),\s+\d+\s+user/); return m ? m[1].trim() : uptimeOut.replace(/.*up\s+/,'').split(',').slice(0,2).join(',').trim() || '—'; })(),
         os: osOut, gpu:'N/A',
         procs: procOut.split('\n').filter(Boolean).map(l=>{
           const [n,p,c,m]=l.split('|');
